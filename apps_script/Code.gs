@@ -32,6 +32,19 @@ var PIC_ACCESS = {
 // Baris awal data pada template _2026 (header di baris 7-8, data mulai baris 9)
 var DATA_START_ROW = 9;
 
+// ---- AUTH: sheet penyimpan akun + aturan akses per jabatan ----
+var USERS_SHEET = "Users";
+var SALT = "ditsama-2026-salt";   // ganti dengan teks acak rahasia kamu
+
+// jabatan -> program yang boleh diisi
+var ROLE_ACCESS = {
+  "Admin":                        ["SIAP", "INSPIRASI_EDQ", "INSPIRASI_SCD"],
+  "Head Program":                 ["SIAP", "INSPIRASI_EDQ", "INSPIRASI_SCD"],
+  "PIC SIAP":                     ["SIAP"],
+  "PIC Inspirasi Eduquest":       ["INSPIRASI_EDQ"],
+  "PIC Inspirasi Sang Cendekia":  ["INSPIRASI_SCD"],
+};
+
 // Pemetaan field form -> kolom (1-indexed) pada template _2026
 var COLMAP = {
   tanggal: 1, kegiatan: 2, anggaran: 3, realisasi: 4, target: 5, actual: 6,
@@ -85,13 +98,17 @@ function readSheet_(ss, sheetName) {
 function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
-    if (body.action !== "write") return json_({ ok: false, error: "aksi tidak dikenal" });
 
-    var prog = body.program, pic = String(body.pic || "").toLowerCase(), pass = String(body.password || "");
-    // cek password PIC
-    var acc = PIC_ACCESS[prog];
-    if (!acc || acc[pic] === undefined) return json_({ ok: false, error: "PIC tidak terdaftar untuk program ini" });
-    if (acc[pic] !== pass) return json_({ ok: false, error: "Password salah" });
+    if (body.action === "signup") return handleSignup_(body);
+    if (body.action === "login")  return handleLogin_(body);
+    if (body.action !== "write")  return json_({ ok: false, error: "aksi tidak dikenal" });
+
+    // --- write: verifikasi token login ---
+    var user = getUserByToken_(body.token);
+    if (!user) return json_({ ok: false, error: "Sesi tidak valid, silakan login ulang." });
+    var prog = body.program;
+    var allowed = ROLE_ACCESS[user.jabatan] || [];
+    if (allowed.indexOf(prog) < 0) return json_({ ok: false, error: "Jabatan Anda tidak berhak mengisi program ini." });
 
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sh = ss.getSheetByName(SHEETS[prog]);
@@ -179,6 +196,60 @@ function onOpen() {
 }
 function refreshPivotMenu_() {
   updatePivot_(SpreadsheetApp.openById(SPREADSHEET_ID));
+}
+
+// ---------------------------------------------------------------- AUTH ------
+function usersSheet_() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sh = ss.getSheetByName(USERS_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(USERS_SHEET);
+    sh.getRange(1, 1, 1, 5).setValues([["Nama", "Jabatan", "Email", "PasswordHash", "Dibuat"]])
+      .setFontWeight("bold").setBackground("#1B3A6B").setFontColor("#FFFFFF");
+  }
+  return sh;
+}
+function hash_(s) {
+  var raw = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s + SALT);
+  return raw.map(function (b) { return ("0" + (b & 0xff).toString(16)).slice(-2); }).join("");
+}
+function findUser_(nama) {
+  var sh = usersSheet_();
+  var last = sh.getLastRow();
+  if (last < 2) return null;
+  var data = sh.getRange(2, 1, last - 1, 5).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][0]).toLowerCase() === String(nama).toLowerCase()) {
+      return { nama: data[i][0], jabatan: data[i][1], email: data[i][2], hash: data[i][3] };
+    }
+  }
+  return null;
+}
+function handleSignup_(b) {
+  var nama = String(b.nama || "").trim(), jab = String(b.jabatan || "").trim(),
+      email = String(b.email || "").trim(), pass = String(b.password || "");
+  if (!nama || !jab || !email || !pass) return json_({ ok: false, error: "Lengkapi semua kolom." });
+  if (!ROLE_ACCESS[jab]) return json_({ ok: false, error: "Jabatan tidak dikenal." });
+  if (findUser_(nama)) return json_({ ok: false, error: "Nama sudah terdaftar." });
+  usersSheet_().appendRow([nama, jab, email, hash_(pass), new Date()]);
+  return json_({ ok: true });
+}
+function handleLogin_(b) {
+  var nama = String(b.nama || "").trim(), jab = String(b.jabatan || "").trim(), pass = String(b.password || "");
+  var u = findUser_(nama);
+  if (!u) return json_({ ok: false, error: "Akun tidak ditemukan. Silakan sign up." });
+  if (u.jabatan !== jab) return json_({ ok: false, error: "Jabatan tidak cocok." });
+  if (u.hash !== hash_(pass)) return json_({ ok: false, error: "Password salah." });
+  // buat token & simpan 6 jam
+  var token = Utilities.getUuid();
+  CacheService.getScriptCache().put("sess_" + token,
+    JSON.stringify({ nama: u.nama, jabatan: u.jabatan, email: u.email }), 21600);
+  return json_({ ok: true, token: token, user: { nama: u.nama, jabatan: u.jabatan, email: u.email } });
+}
+function getUserByToken_(token) {
+  if (!token) return null;
+  var v = CacheService.getScriptCache().get("sess_" + token);
+  return v ? JSON.parse(v) : null;
 }
 
 // ---------------------------------------------------------------- utils -----
