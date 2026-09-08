@@ -19,9 +19,17 @@ const OPSI_KEBERJALANAN = [
 ];
 const OPSI_LEVEL_ISU = ["Tidak Ada", "High", "Medium", "Low"];
 
-// Akun untuk masuk ke dashboard (Add Access). Ganti sesuai kebutuhan.
-// (Catatan: ini gerbang dasar sisi-browser; untuk keamanan penuh perlu server.)
-const ACCOUNTS = {
-  "admin": "admin123",
-  "ditsama": "ditsama2026",
-};
+// ============================================================
+//  DAFTAR PIC TERDAFTAR
+//  Dipakai untuk: (a) login "Add Access", dan (b) gerbang akses form input.
+//  Tiap PIC hanya bisa membuka form input PROGRAM miliknya sendiri.
+//  (Catatan: ini gerbang sisi-browser; untuk keamanan penuh, pindahkan ke
+//   Apps Script/server. Kalau repo public, jangan taruh password asli di sini.)
+// ============================================================
+const PICS = [
+  { nama: "Budi", jabatan: "Koordinator SIAP",     email: "budi@itb.ac.id",  password: "siap123", program: "SIAP" },
+  { nama: "Sari", jabatan: "Koordinator EduQuest", email: "sari@itb.ac.id",  password: "edq123",  program: "INSPIRASI_EDQ" },
+  { nama: "Anto", jabatan: "Koordinator SCD",      email: "anto@itb.ac.id",  password: "scd123",  program: "INSPIRASI_SCD" },
+  // Admin bisa akses semua (program: "*")
+  { nama: "Admin", jabatan: "Admin", email: "admin@itb.ac.id", password: "admin123", program: "*" },
+];
