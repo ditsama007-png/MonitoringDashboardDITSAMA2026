@@ -278,10 +278,14 @@ function renderTable() {
 // -------------------------------------------------------- simpan form -------
 async function simpan() {
   const msg = $("save-msg"); msg.textContent = ""; msg.className = "save-msg";
+  if (!SESSION) { msg.textContent = "Anda belum login."; msg.classList.add("err"); return; }
+  const program = $("in-program").value;
+  if (!canAccessProgram(program)) { msg.textContent = "Jabatan Anda tak berhak mengisi program ini."; msg.classList.add("err"); return; }
+
   const payload = {
-    program: $("in-program").value,
-    pic: $("in-pic").value.trim(),
-    password: $("in-pass").value,
+    action: "write",
+    token: SESSION.token,
+    program: program,
     row: {
       tanggal: $("f-tanggal").value,
       kegiatan: $("f-kegiatan").value.trim(),
@@ -292,11 +296,10 @@ async function simpan() {
       ketisu: $("f-ketisu").value.trim(), jenis: $("f-jenis").value.trim(),
     },
   };
-  if (!payload.kegiatan) { msg.textContent = "Nama kegiatan wajib diisi."; msg.classList.add("err"); return; }
-  if (!payload.pic || !payload.password) { msg.textContent = "PIC & password wajib diisi."; msg.classList.add("err"); return; }
+  if (!payload.row.kegiatan) { msg.textContent = "Nama kegiatan wajib diisi."; msg.classList.add("err"); return; }
 
   if (!API_URL) {   // mode demo: simpan sementara di memori
-    (DATA[payload.program] = DATA[payload.program] || []).push({ ...payload.row });
+    (DATA[program] = DATA[program] || []).push({ ...payload.row });
     msg.textContent = "Tersimpan (mode contoh — belum ke Sheets)."; msg.classList.add("ok");
     renderTable(); rebuildFilters(); render(); return;
   }
@@ -305,14 +308,14 @@ async function simpan() {
   try {
     const res = await fetch(API_URL, {
       method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "write", ...payload }),
+      body: JSON.stringify(payload),
     });
     const out = await res.json();
     if (out.ok) {
       msg.textContent = "✅ Tersimpan ke Sheets."; msg.classList.add("ok");
       await loadData(); renderTable(); rebuildFilters(); render();
     } else {
-      msg.textContent = "❌ " + (out.error || "Gagal (cek password/PIC)."); msg.classList.add("err");
+      msg.textContent = "❌ " + (out.error || "Gagal menyimpan."); msg.classList.add("err");
     }
   } catch (e) {
     msg.textContent = "❌ Gagal terhubung ke server."; msg.classList.add("err");
@@ -384,16 +387,17 @@ function initToggles() {
   $("chev-control").addEventListener("click", toggleControl);
   $("show-control").addEventListener("click", toggleControl);
 
-  // navigasi: dashboard langsung; program -> lewat gerbang PIC
+  // navigasi: dashboard langsung; program -> buka form kalau punya akses
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => {
       const view = btn.dataset.view;
-      if (view === "dashboard") {
-        setActiveNav(btn);
-        showView("dashboard");
-      } else {
-        openGate(view, btn);   // minta nama/jabatan/password dulu
+      if (view === "dashboard") { setActiveNav(btn); showView("dashboard"); return; }
+      if (!canAccessProgram(view)) {
+        alert("Jabatan Anda tidak memiliki akses ke input program ini.");
+        return;
       }
+      setActiveNav(btn);
+      showView(view);
     });
   });
 }
@@ -403,37 +407,15 @@ function setActiveNav(btn) {
   if (btn) btn.classList.add("active");
 }
 
-// ------------------------------------------------------ gerbang PIC ---------
-let GATE_TARGET = null, GATE_BTN = null;
-function openGate(programKey, btn) {
-  GATE_TARGET = programKey; GATE_BTN = btn;
-  const p = programByKey(programKey);
-  $("gate-title").textContent = "Akses Form · " + (p ? p.label : programKey);
-  $("gate-nama").value = ""; $("gate-jabatan").value = ""; $("gate-pass").value = "";
-  $("gate-msg").textContent = ""; $("gate-msg").className = "save-msg";
-  $("gate-modal").hidden = false;
-}
-function doGate() {
-  const nama = $("gate-nama").value.trim();
-  const jab = $("gate-jabatan").value.trim();
-  const pass = $("gate-pass").value;
-  const msg = $("gate-msg");
-  // cari PIC yang cocok DAN berhak atas program ini (atau admin '*')
-  const pic = PICS.find((x) =>
-    x.nama.toLowerCase() === nama.toLowerCase() &&
-    x.jabatan.toLowerCase() === jab.toLowerCase() &&
-    x.password === pass &&
-    (x.program === GATE_TARGET || x.program === "*"));
-  if (!pic) {
-    msg.textContent = "Nama/jabatan/password salah, atau bukan PIC program ini.";
-    msg.classList.add("err"); return;
-  }
-  // sukses -> buka form program, isi otomatis PIC & password (untuk simpan)
-  $("gate-modal").hidden = true;
-  setActiveNav(GATE_BTN);
-  $("in-pic").value = pic.nama;
-  $("in-pass").value = pic.password;
-  showView(GATE_TARGET);
+// ------------------------------------------------ akses per jabatan --------
+function accessOf(jabatan) { return ROLE_ACCESS[jabatan] || { programs: [], manageUsers: false }; }
+function canAccessProgram(key) { return SESSION ? accessOf(SESSION.jabatan).programs.includes(key) : false; }
+function applyAccess() {
+  document.querySelectorAll('.nav-item[data-view]').forEach((btn) => {
+    const v = btn.dataset.view;
+    btn.style.display = (v === "dashboard" || canAccessProgram(v)) ? "" : "none";
+  });
+  $("access-label").textContent = SESSION ? (SESSION.nama + " · " + SESSION.jabatan) : "Profil";
 }
 
 function showView(view) {
@@ -456,66 +438,100 @@ function showView(view) {
   }
 }
 
-// -------------------------------------------------------------- login -------
-let CURRENT_USER = null;
-let LOGIN_MODE = "login";   // "login" | "signup"
+// -------------------------------------------------------- AUTH -------------
+let SESSION = null;            // {nama, jabatan, email, token}
+let AUTH_MODE = "login";
+const SESSION_KEY = "ditsama_session";
 
-function openLogin() {
-  if (CURRENT_USER) {            // sudah masuk -> klik = keluar
-    CURRENT_USER = null;
-    $("access-label").textContent = "Sign in / Login";
-    return;
-  }
-  setLoginMode("login");
-  $("login-msg").textContent = ""; $("login-msg").className = "save-msg";
-  $("login-modal").hidden = false;
-}
-function setLoginMode(mode) {
-  LOGIN_MODE = mode;
+function setAuthMode(mode) {
+  AUTH_MODE = mode;
   $("tab-login").classList.toggle("active", mode === "login");
   $("tab-signup").classList.toggle("active", mode === "signup");
   $("wrap-email").hidden = (mode === "login");
-  $("login-sub").textContent = mode === "login"
-    ? "Masuk dengan nama, jabatan & password terdaftar."
-    : "Daftar akun baru: nama, jabatan, email & password.";
-  $("btn-login").textContent = mode === "login" ? "Masuk" : "Daftar";
+  $("auth-sub").textContent = mode === "login"
+    ? "Masuk dengan nama, jabatan & password."
+    : "Daftar akun baru (sekali saja): nama, jabatan, email & password.";
+  $("btn-auth").textContent = mode === "login" ? "Masuk" : "Daftar";
 }
-function doLogin() {
-  const nama = $("log-nama").value.trim();
-  const jab = $("log-jabatan").value.trim();
-  const pass = $("log-pass").value;
-  const email = $("log-email").value.trim();
-  const msg = $("login-msg"); msg.textContent = ""; msg.className = "save-msg";
 
-  if (LOGIN_MODE === "signup") {
-    if (!nama || !jab || !email || !pass) { msg.textContent = "Lengkapi semua kolom."; msg.classList.add("err"); return; }
-    // demo: tambah ke daftar (belum tersimpan permanen tanpa server)
-    PICS.push({ nama, jabatan: jab, email, password: pass, program: "" });
-    msg.textContent = "Terdaftar (sementara). Untuk permanen perlu server."; msg.classList.add("ok");
-    setTimeout(() => setLoginMode("login"), 900);
-    return;
+async function doAuth() {
+  const nama = $("a-nama").value.trim(), jab = $("a-jabatan").value,
+        email = $("a-email").value.trim(), pass = $("a-pass").value;
+  const msg = $("auth-msg"); msg.textContent = ""; msg.className = "save-msg";
+  if (!nama || !jab || !pass || (AUTH_MODE === "signup" && !email)) {
+    msg.textContent = "Lengkapi semua kolom."; msg.classList.add("err"); return;
   }
-  // login
-  const pic = PICS.find((x) =>
-    x.nama.toLowerCase() === nama.toLowerCase() &&
-    x.jabatan.toLowerCase() === jab.toLowerCase() &&
-    x.password === pass);
-  if (pic) {
-    CURRENT_USER = pic.nama;
-    $("access-label").textContent = "Masuk: " + pic.nama;
-    $("login-modal").hidden = true;
-    $("log-pass").value = "";
-  } else {
-    msg.textContent = "Nama/jabatan/password salah."; msg.classList.add("err");
+  if (!API_URL) return demoAuth(nama, jab, email, pass, msg);   // mode contoh
+
+  msg.textContent = "Memproses...";
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: AUTH_MODE, nama, jabatan: jab, email, password: pass }),
+    });
+    const out = await res.json();
+    if (!out.ok) { msg.textContent = "❌ " + (out.error || "Gagal."); msg.classList.add("err"); return; }
+    if (AUTH_MODE === "signup") { msg.textContent = "✅ Terdaftar. Silakan login."; msg.classList.add("ok"); setAuthMode("login"); return; }
+    loginSuccess({ nama: out.user.nama, jabatan: out.user.jabatan, email: out.user.email, token: out.token });
+  } catch (e) { msg.textContent = "❌ Gagal terhubung ke server."; msg.classList.add("err"); }
+}
+
+// mode contoh: simpan akun di localStorage browser
+function demoAuth(nama, jab, email, pass, msg) {
+  let store = [];
+  try { store = JSON.parse(localStorage.getItem("ditsama_users") || "[]"); } catch (e) {}
+  if (AUTH_MODE === "signup") {
+    if (store.some((u) => u.nama.toLowerCase() === nama.toLowerCase())) {
+      msg.textContent = "Nama sudah terdaftar."; msg.classList.add("err"); return;
+    }
+    store.push({ nama, jabatan: jab, email, password: pass });
+    localStorage.setItem("ditsama_users", JSON.stringify(store));
+    msg.textContent = "✅ Terdaftar (demo). Silakan login."; msg.classList.add("ok"); setAuthMode("login"); return;
   }
+  const u = store.find((x) => x.nama.toLowerCase() === nama.toLowerCase() && x.jabatan === jab && x.password === pass);
+  if (!u) { msg.textContent = "Nama/jabatan/password salah, atau belum sign up."; msg.classList.add("err"); return; }
+  loginSuccess({ nama: u.nama, jabatan: u.jabatan, email: u.email, token: "demo" });
+}
+
+function loginSuccess(sess) {
+  SESSION = sess;
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(sess)); } catch (e) {}
+  $("auth-gate").style.display = "none";
+  applyAccess();
+  setActiveNav(document.querySelector('.nav-item[data-view="dashboard"]'));
+  showView("dashboard");
+}
+
+function logout() {
+  SESSION = null;
+  try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+  $("profile-modal").hidden = true;
+  $("a-pass").value = "";
+  $("auth-gate").style.display = "";
+}
+
+function openProfile() {
+  if (!SESSION) { $("auth-gate").style.display = ""; return; }
+  const acc = accessOf(SESSION.jabatan);
+  $("profile-info").innerHTML =
+    "<b>" + SESSION.nama + "</b><br>Jabatan: " + SESSION.jabatan +
+    "<br>Email: " + (SESSION.email || "-") +
+    "<br>Akses program: " + (acc.programs.map(labelOf).join(", ") || "-") +
+    (acc.manageUsers ? "<br>Hak: kelola akun (Admin)" : "");
+  $("profile-modal").hidden = false;
+}
+
+function restoreSession() {
+  try { const s = JSON.parse(localStorage.getItem(SESSION_KEY)); if (s && s.nama) { SESSION = s; return true; } } catch (e) {}
+  return false;
 }
 
 async function init() {
   initSelects();
   initToggles();
+  $("a-jabatan").innerHTML = JABATAN.map((j) => `<option>${j}</option>`).join("");
   await loadData();
   rebuildFilters();
-  renderTable();
   render();
 
   $("btn-simpan").addEventListener("click", simpan);
@@ -524,18 +540,18 @@ async function init() {
   ["flt-program", "flt-bulan", "flt-kegiatan", "flt-level"].forEach((id) =>
     $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
 
-  showView("dashboard");   // mulai dari dashboard
+  // auth
+  $("tab-login").addEventListener("click", () => setAuthMode("login"));
+  $("tab-signup").addEventListener("click", () => setAuthMode("signup"));
+  $("btn-auth").addEventListener("click", doAuth);
+  $("btn-access").addEventListener("click", openProfile);
+  $("btn-logout").addEventListener("click", logout);
+  $("btn-profile-close").addEventListener("click", () => { $("profile-modal").hidden = true; });
+  setAuthMode("login");
 
-  // login (Add Access) + tab login/signup
-  $("btn-access").addEventListener("click", openLogin);
-  $("btn-login").addEventListener("click", doLogin);
-  $("btn-login-cancel").addEventListener("click", () => { $("login-modal").hidden = true; });
-  $("tab-login").addEventListener("click", () => setLoginMode("login"));
-  $("tab-signup").addEventListener("click", () => setLoginMode("signup"));
-
-  // gerbang PIC untuk form input
-  $("btn-gate").addEventListener("click", doGate);
-  $("btn-gate-cancel").addEventListener("click", () => { $("gate-modal").hidden = true; });
+  // sesi tersimpan? -> langsung masuk; kalau belum -> tampilkan gerbang login
+  if (restoreSession()) { loginSuccess(SESSION); }
+  else { $("auth-gate").style.display = ""; }
 }
 
 window.addEventListener("DOMContentLoaded", init);
