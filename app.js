@@ -447,9 +447,10 @@ function setAuthMode(mode) {
   AUTH_MODE = mode;
   $("tab-login").classList.toggle("active", mode === "login");
   $("tab-signup").classList.toggle("active", mode === "signup");
+  $("wrap-jabatan").hidden = (mode === "login");   // login cukup nama+password
   $("wrap-email").hidden = (mode === "login");
   $("auth-sub").textContent = mode === "login"
-    ? "Masuk dengan nama, jabatan & password."
+    ? "Masuk cukup dengan nama & password."
     : "Daftar akun baru (sekali saja): nama, jabatan, email & password.";
   $("btn-auth").textContent = mode === "login" ? "Masuk" : "Daftar";
 }
@@ -458,8 +459,11 @@ async function doAuth() {
   const nama = $("a-nama").value.trim(), jab = $("a-jabatan").value,
         email = $("a-email").value.trim(), pass = $("a-pass").value;
   const msg = $("auth-msg"); msg.textContent = ""; msg.className = "save-msg";
-  if (!nama || !jab || !pass || (AUTH_MODE === "signup" && !email)) {
-    msg.textContent = "Lengkapi semua kolom."; msg.classList.add("err"); return;
+  // login cukup nama+password; sign up butuh semua
+  if (AUTH_MODE === "signup") {
+    if (!nama || !jab || !email || !pass) { msg.textContent = "Lengkapi semua kolom."; msg.classList.add("err"); return; }
+  } else {
+    if (!nama || !pass) { msg.textContent = "Isi nama & password."; msg.classList.add("err"); return; }
   }
   if (!API_URL) return demoAuth(nama, jab, email, pass, msg);   // mode contoh
 
@@ -488,8 +492,8 @@ function demoAuth(nama, jab, email, pass, msg) {
     localStorage.setItem("ditsama_users", JSON.stringify(store));
     msg.textContent = "✅ Terdaftar (demo). Silakan login."; msg.classList.add("ok"); setAuthMode("login"); return;
   }
-  const u = store.find((x) => x.nama.toLowerCase() === nama.toLowerCase() && x.jabatan === jab && x.password === pass);
-  if (!u) { msg.textContent = "Nama/jabatan/password salah, atau belum sign up."; msg.classList.add("err"); return; }
+  const u = store.find((x) => x.nama.toLowerCase() === nama.toLowerCase() && x.password === pass);
+  if (!u) { msg.textContent = "Nama/password salah, atau belum sign up."; msg.classList.add("err"); return; }
   loginSuccess({ nama: u.nama, jabatan: u.jabatan, email: u.email, token: "demo" });
 }
 
