@@ -235,10 +235,9 @@ function handleSignup_(b) {
   return json_({ ok: true });
 }
 function handleLogin_(b) {
-  var nama = String(b.nama || "").trim(), jab = String(b.jabatan || "").trim(), pass = String(b.password || "");
+  var nama = String(b.nama || "").trim(), pass = String(b.password || "");
   var u = findUser_(nama);
   if (!u) return json_({ ok: false, error: "Akun tidak ditemukan. Silakan sign up." });
-  if (u.jabatan !== jab) return json_({ ok: false, error: "Jabatan tidak cocok." });
   if (u.hash !== hash_(pass)) return json_({ ok: false, error: "Password salah." });
   // buat token & simpan 6 jam
   var token = Utilities.getUuid();
