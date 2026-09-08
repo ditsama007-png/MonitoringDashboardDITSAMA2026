@@ -122,10 +122,63 @@ function doPost(e) {
     setCell_(sh, target, 10, lv === "Low");
     setCell_(sh, target, 11, lv === "Tidak Ada");
 
+    updatePivot_(ss);          // perbarui sheet "Pivot"
     return json_({ ok: true, row: target });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
+}
+
+// ---------------------------------------------------------------- PIVOT -----
+var KEBER = { "sesuai rencana": 1, "ada kendala": 0.7, "tidak sesuai rencana": 0.4 };
+var LABELS = { "SIAP": "SIAP ITB", "INSPIRASI_EDQ": "INSPIRASI EduQuest", "INSPIRASI_SCD": "INSPIRASI SCD" };
+
+function updatePivot_(ss) {
+  var sh = ss.getSheetByName("Pivot") || ss.insertSheet("Pivot");
+  sh.clear();
+  sh.getRange(1, 1).setValue("PIVOT DATA MONITORING DITSAMA 2026").setFontWeight("bold").setFontSize(12);
+  sh.getRange(2, 1).setValue("Diperbarui otomatis: " + new Date()).setFontColor("#888888");
+
+  var headers = ["Program", "Jumlah Kegiatan", "Total Anggaran", "Total Realisasi",
+                 "Total Target", "Total Actual", "Progress"];
+  sh.getRange(4, 1, 1, headers.length).setValues([headers])
+    .setFontWeight("bold").setFontColor("#FFFFFF").setBackground("#1B3A6B");
+
+  var row = 5;
+  var tot = { keg: 0, ang: 0, real: 0, tgt: 0, act: 0 };
+  Object.keys(SHEETS).forEach(function (key) {
+    var rows = readSheet_(ss, SHEETS[key]);
+    var keg = 0, ang = 0, real = 0, tgt = 0, act = 0, scores = [];
+    rows.forEach(function (r) {
+      if (String(r.kegiatan).trim()) keg++;
+      ang += r.anggaran; real += r.realisasi; tgt += r.target; act += r.actual;
+      var comps = [];
+      ["nilai", "hadir", "feedback"].forEach(function (k) { if (r[k] > 0) comps.push(Math.min(r[k], 1)); });
+      var kb = KEBER[(r.keberjalanan || "").toLowerCase()];
+      if (kb !== undefined) comps.push(kb);
+      if (comps.length) scores.push(comps.reduce(function (a, b) { return a + b; }, 0) / comps.length);
+    });
+    var prog = scores.length ? Math.min(scores.reduce(function (a, b) { return a + b; }, 0) / scores.length, 1) : 0;
+    sh.getRange(row, 1, 1, headers.length).setValues([[
+      LABELS[key] || key, keg, ang, real, tgt, act, Math.round(prog * 100) + "%"]]);
+    tot.keg += keg; tot.ang += ang; tot.real += real; tot.tgt += tgt; tot.act += act;
+    row++;
+  });
+  // baris total
+  sh.getRange(row, 1, 1, headers.length).setValues([[
+    "TOTAL", tot.keg, tot.ang, tot.real, tot.tgt, tot.act, ""]]).setFontWeight("bold").setBackground("#EAF1FB");
+
+  sh.getRange(5, 3, row - 4, 2).setNumberFormat('"Rp" #,##0');
+  sh.autoResizeColumns(1, headers.length);
+}
+
+// menu manual di Google Sheets untuk refresh pivot
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu("Dashboard DITSAMA")
+    .addItem("Refresh Pivot", "refreshPivotMenu_").addToUi();
+}
+function refreshPivotMenu_() {
+  updatePivot_(SpreadsheetApp.openById(SPREADSHEET_ID));
 }
 
 // ---------------------------------------------------------------- utils -----
