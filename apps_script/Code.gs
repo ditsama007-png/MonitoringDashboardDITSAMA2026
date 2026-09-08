@@ -11,7 +11,7 @@
    ========================================================================= */
 
 // ---- KONFIGURASI ----
-var SPREADSHEET_ID = "1sg_lZ6m07g9hISqDwDG2MVAoG55oNJgk";  // ID Google Sheets kamu
+var SPREADSHEET_ID = "11b_kQGiPNyO-Gkej9dugfQtuoHr2s-D57vxlRv77oCE";  // ID Google Sheets kamu
 
 // program key -> nama sheet
 var SHEETS = {
