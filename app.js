@@ -350,14 +350,44 @@ function showView(view) {
   const isDash = view === "dashboard";
   $("view-dash").hidden = !isDash;
   $("view-form").hidden = isDash;
+
+  // Control (filter) & judul "Dashboard" hanya tampil di view dashboard
+  $("control").style.display = isDash ? "" : "none";
+  $("show-control").style.display = isDash ? "" : "none";
+  document.querySelector(".title").style.visibility = isDash ? "visible" : "hidden";
+
   if (isDash) {
     render();
   } else {
-    // view = key program -> siapkan form program itu
     $("in-program").value = view;
     const p = programByKey(view);
     $("form-title").textContent = "Form Input · " + (p ? p.label : view);
     renderTable();
+  }
+}
+
+// -------------------------------------------------------------- login -------
+let CURRENT_USER = null;
+function openLogin() {
+  if (CURRENT_USER) {            // sudah masuk -> klik = keluar
+    CURRENT_USER = null;
+    $("access-label").textContent = "Add Access";
+    return;
+  }
+  $("login-msg").textContent = ""; $("login-msg").className = "save-msg";
+  $("login-modal").hidden = false;
+}
+function doLogin() {
+  const u = $("log-user").value.trim().toLowerCase();
+  const p = $("log-pass").value;
+  const msg = $("login-msg");
+  if (typeof ACCOUNTS !== "undefined" && ACCOUNTS[u] !== undefined && ACCOUNTS[u] === p) {
+    CURRENT_USER = u;
+    $("access-label").textContent = "Masuk: " + u;
+    $("login-modal").hidden = true;
+    $("log-pass").value = "";
+  } else {
+    msg.textContent = "Akun atau password salah."; msg.classList.add("err");
   }
 }
 
@@ -376,6 +406,11 @@ async function init() {
     $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
 
   showView("dashboard");   // mulai dari dashboard
+
+  // login (Add Access)
+  $("btn-access").addEventListener("click", openLogin);
+  $("btn-login").addEventListener("click", doLogin);
+  $("btn-login-cancel").addEventListener("click", () => { $("login-modal").hidden = true; });
 }
 
 window.addEventListener("DOMContentLoaded", init);
