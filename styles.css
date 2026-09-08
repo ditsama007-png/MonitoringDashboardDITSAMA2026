@@ -13,7 +13,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .rail{background:var(--rail);color:#fff;width:230px;flex:0 0 230px;
   border-radius:0 26px 26px 0;padding:1rem .9rem;display:flex;flex-direction:column;
   transition:margin .25s ease;position:sticky;top:0;align-self:flex-start;
-  max-height:100vh;overflow-y:auto}
+  height:100vh;overflow-y:auto}
 .rail.hide{margin-left:-246px}
 .rail-top{display:flex;justify-content:space-between;align-items:flex-start;gap:.4rem}
 .rail-brand{display:flex;gap:.5rem;align-items:center}
@@ -44,8 +44,9 @@ body{margin:0;background:var(--bg);color:var(--ink);
 
 /* ---------------- CONTROL (filter biru terang) ---------------- */
 .control{background:var(--ctrl);color:#fff;width:220px;flex:0 0 220px;
-  border-radius:26px;margin:.9rem 0 .9rem -14px;padding:1rem;display:flex;flex-direction:column;
-  transition:margin .25s ease, opacity .2s;box-shadow:0 8px 22px rgba(0,0,0,.12)}
+  border-radius:0 26px 26px 0;margin:0 0 0 -14px;padding:1rem;display:flex;flex-direction:column;
+  transition:margin .25s ease, opacity .2s;box-shadow:0 8px 22px rgba(0,0,0,.12);
+  position:sticky;top:0;align-self:flex-start;height:100vh;overflow-y:auto}
 .control.hide{margin-left:-244px;opacity:0;pointer-events:none}
 .control-head{font-weight:800;font-size:1.1rem;display:flex;justify-content:space-between;align-items:center}
 .chev{background:transparent;border:none;color:#fff;font-size:1.3rem;cursor:pointer}
@@ -131,3 +132,10 @@ tbody tr:nth-child(even){background:#F8FAFD}
   .grid-2,.grid-3,.kpi-row{grid-template-columns:1fr}
   .control{left:0}
 }
+
+/* tab login/signup */
+.tabs{display:flex;gap:.4rem;margin-bottom:.6rem}
+.tab{flex:1;background:#EEF2F9;border:none;border-radius:9px;padding:.45rem;font-weight:700;
+  color:var(--navy);cursor:pointer;font-size:.85rem}
+.tab.active{background:var(--blue);color:#fff}
+.modal-box label{margin-bottom:.6rem}
