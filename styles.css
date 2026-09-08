@@ -143,3 +143,14 @@ tbody tr:nth-child(even){background:#F8FAFD}
   color:var(--navy);cursor:pointer;font-size:.85rem}
 .tab.active{background:var(--blue);color:#fff}
 .modal-box label{margin-bottom:.6rem}
+
+/* ---------------- gerbang login full-screen ---------------- */
+.gate{position:fixed;inset:0;background:linear-gradient(135deg,#1B3A6B,#3a6db0);
+  display:flex;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.gate-box{background:#fff;border-radius:18px;padding:1.6rem;width:min(380px,94vw);
+  box-shadow:0 24px 60px rgba(0,0,0,.35)}
+.gate-brand{font-weight:800;font-size:1.05rem;color:var(--navy);display:flex;
+  align-items:center;gap:.5rem;margin-bottom:1rem;justify-content:center}
+.gate-brand .badge{background:var(--navy);color:#fff;border-radius:8px;padding:.2rem .45rem}
+.gate .btn-primary.wide,.wide{width:100%;margin-top:.4rem}
+.gate label{margin-bottom:.7rem}
