@@ -87,7 +87,15 @@ function statusOf(p) {
 // ------------------------------------------------------------- render -------
 let chartFinance, chartParticipant;
 
+function assignIds() {
+  Object.keys(DATA).forEach((k) => {
+    const pref = k.replace("INSPIRASI_", "").slice(0, 4).toUpperCase();
+    (DATA[k] || []).forEach((r, i) => { if (!r.id) r.id = pref + "-" + String(i + 1).padStart(3, "0"); });
+  });
+}
+
 function render() {
+  assignIds();
   $("demo-banner").hidden = !IS_DEMO;
   const rows = rowsForFilter();
 
@@ -110,6 +118,45 @@ function render() {
   renderParticipant(rows);
   renderIssues(rows);
   renderMilestones(rows);
+  renderPivot(rows);
+  renderDetail(rows);
+}
+
+function renderPivot(rows) {
+  const thead = document.querySelector("#pivot-table thead");
+  const tbody = document.querySelector("#pivot-table tbody");
+  const cols = ["Program", "Jml Kegiatan", "Total Anggaran", "Total Realisasi", "Target", "Actual", "Progress"];
+  thead.innerHTML = "<tr>" + cols.map((c) => `<th>${c}</th>`).join("") + "</tr>";
+  const progs = [...new Set(rows.map((r) => r._prog))];
+  if (!progs.length) { tbody.innerHTML = `<tr><td colspan="${cols.length}" class="empty">Belum ada data.</td></tr>`; return; }
+  let body = "";
+  progs.forEach((k) => {
+    const pr = rows.filter((r) => r._prog === k);
+    const keg = pr.filter((r) => (r.kegiatan || "").trim()).length;
+    const ang = pr.reduce((s, r) => s + (+r.anggaran || 0), 0);
+    const real = pr.reduce((s, r) => s + (+r.realisasi || 0), 0);
+    const tgt = pr.reduce((s, r) => s + (+r.target || 0), 0);
+    const act = pr.reduce((s, r) => s + (+r.actual || 0), 0);
+    const prog = Math.round(programProgress(pr) * 100);
+    body += `<tr><td>${labelOf(k)}</td><td>${keg}</td><td>${fmtRupiah(ang)}</td>
+      <td>${fmtRupiah(real)}</td><td>${tgt}</td><td>${act}</td><td>${prog}%</td></tr>`;
+  });
+  tbody.innerHTML = body;
+}
+
+function renderDetail(rows) {
+  const thead = document.querySelector("#detail-table thead");
+  const tbody = document.querySelector("#detail-table tbody");
+  const cols = [["id","ID"],["_prog","Program"],["tanggal","Tanggal"],["kegiatan","Kegiatan"],
+    ["anggaran","Anggaran"],["realisasi","Realisasi"],["target","Target"],["actual","Actual"],
+    ["level","Level Isu"],["jenis","Milestone"]];
+  thead.innerHTML = "<tr>" + cols.map((c) => `<th>${c[1]}</th>`).join("") + "</tr>";
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${cols.length}" class="empty">Belum ada data.</td></tr>`; return; }
+  tbody.innerHTML = rows.map((r) => "<tr>" + cols.map(([k]) => {
+    let v = (k === "_prog") ? labelOf(r._prog) : r[k];
+    if (k === "anggaran" || k === "realisasi") v = fmtRupiah(v);
+    return `<td>${v ?? ""}</td>`;
+  }).join("") + "</tr>").join("");
 }
 
 function renderPortfolio(rows, progs) {
@@ -213,9 +260,10 @@ function renderMilestones(rows) {
 
 // ------------------------------------------------------ tabel data form -----
 function renderTable() {
+  assignIds();
   const key = $("in-program").value;
   const rows = DATA[key] || [];
-  const cols = [["tanggal","Tanggal"],["kegiatan","Kegiatan"],["anggaran","Anggaran"],
+  const cols = [["id","ID"],["tanggal","Tanggal"],["kegiatan","Kegiatan"],["anggaran","Anggaran"],
     ["realisasi","Realisasi"],["target","Target"],["actual","Actual"],["level","Level Isu"],["jenis","Milestone"]];
   const thead = document.querySelector("#data-table thead");
   const tbody = document.querySelector("#data-table tbody");
@@ -336,14 +384,56 @@ function initToggles() {
   $("chev-control").addEventListener("click", toggleControl);
   $("show-control").addEventListener("click", toggleControl);
 
-  // navigasi: dashboard vs form per program
+  // navigasi: dashboard langsung; program -> lewat gerbang PIC
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll(".nav-item").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      showView(btn.dataset.view);
+      const view = btn.dataset.view;
+      if (view === "dashboard") {
+        setActiveNav(btn);
+        showView("dashboard");
+      } else {
+        openGate(view, btn);   // minta nama/jabatan/password dulu
+      }
     });
   });
+}
+
+function setActiveNav(btn) {
+  document.querySelectorAll(".nav-item").forEach((b) => b.classList.remove("active"));
+  if (btn) btn.classList.add("active");
+}
+
+// ------------------------------------------------------ gerbang PIC ---------
+let GATE_TARGET = null, GATE_BTN = null;
+function openGate(programKey, btn) {
+  GATE_TARGET = programKey; GATE_BTN = btn;
+  const p = programByKey(programKey);
+  $("gate-title").textContent = "Akses Form · " + (p ? p.label : programKey);
+  $("gate-nama").value = ""; $("gate-jabatan").value = ""; $("gate-pass").value = "";
+  $("gate-msg").textContent = ""; $("gate-msg").className = "save-msg";
+  $("gate-modal").hidden = false;
+}
+function doGate() {
+  const nama = $("gate-nama").value.trim();
+  const jab = $("gate-jabatan").value.trim();
+  const pass = $("gate-pass").value;
+  const msg = $("gate-msg");
+  // cari PIC yang cocok DAN berhak atas program ini (atau admin '*')
+  const pic = PICS.find((x) =>
+    x.nama.toLowerCase() === nama.toLowerCase() &&
+    x.jabatan.toLowerCase() === jab.toLowerCase() &&
+    x.password === pass &&
+    (x.program === GATE_TARGET || x.program === "*"));
+  if (!pic) {
+    msg.textContent = "Nama/jabatan/password salah, atau bukan PIC program ini.";
+    msg.classList.add("err"); return;
+  }
+  // sukses -> buka form program, isi otomatis PIC & password (untuk simpan)
+  $("gate-modal").hidden = true;
+  setActiveNav(GATE_BTN);
+  $("in-pic").value = pic.nama;
+  $("in-pass").value = pic.password;
+  showView(GATE_TARGET);
 }
 
 function showView(view) {
@@ -368,26 +458,55 @@ function showView(view) {
 
 // -------------------------------------------------------------- login -------
 let CURRENT_USER = null;
+let LOGIN_MODE = "login";   // "login" | "signup"
+
 function openLogin() {
   if (CURRENT_USER) {            // sudah masuk -> klik = keluar
     CURRENT_USER = null;
-    $("access-label").textContent = "Add Access";
+    $("access-label").textContent = "Sign in / Login";
     return;
   }
+  setLoginMode("login");
   $("login-msg").textContent = ""; $("login-msg").className = "save-msg";
   $("login-modal").hidden = false;
 }
+function setLoginMode(mode) {
+  LOGIN_MODE = mode;
+  $("tab-login").classList.toggle("active", mode === "login");
+  $("tab-signup").classList.toggle("active", mode === "signup");
+  $("wrap-email").hidden = (mode === "login");
+  $("login-sub").textContent = mode === "login"
+    ? "Masuk dengan nama, jabatan & password terdaftar."
+    : "Daftar akun baru: nama, jabatan, email & password.";
+  $("btn-login").textContent = mode === "login" ? "Masuk" : "Daftar";
+}
 function doLogin() {
-  const u = $("log-user").value.trim().toLowerCase();
-  const p = $("log-pass").value;
-  const msg = $("login-msg");
-  if (typeof ACCOUNTS !== "undefined" && ACCOUNTS[u] !== undefined && ACCOUNTS[u] === p) {
-    CURRENT_USER = u;
-    $("access-label").textContent = "Masuk: " + u;
+  const nama = $("log-nama").value.trim();
+  const jab = $("log-jabatan").value.trim();
+  const pass = $("log-pass").value;
+  const email = $("log-email").value.trim();
+  const msg = $("login-msg"); msg.textContent = ""; msg.className = "save-msg";
+
+  if (LOGIN_MODE === "signup") {
+    if (!nama || !jab || !email || !pass) { msg.textContent = "Lengkapi semua kolom."; msg.classList.add("err"); return; }
+    // demo: tambah ke daftar (belum tersimpan permanen tanpa server)
+    PICS.push({ nama, jabatan: jab, email, password: pass, program: "" });
+    msg.textContent = "Terdaftar (sementara). Untuk permanen perlu server."; msg.classList.add("ok");
+    setTimeout(() => setLoginMode("login"), 900);
+    return;
+  }
+  // login
+  const pic = PICS.find((x) =>
+    x.nama.toLowerCase() === nama.toLowerCase() &&
+    x.jabatan.toLowerCase() === jab.toLowerCase() &&
+    x.password === pass);
+  if (pic) {
+    CURRENT_USER = pic.nama;
+    $("access-label").textContent = "Masuk: " + pic.nama;
     $("login-modal").hidden = true;
     $("log-pass").value = "";
   } else {
-    msg.textContent = "Akun atau password salah."; msg.classList.add("err");
+    msg.textContent = "Nama/jabatan/password salah."; msg.classList.add("err");
   }
 }
 
@@ -407,10 +526,16 @@ async function init() {
 
   showView("dashboard");   // mulai dari dashboard
 
-  // login (Add Access)
+  // login (Add Access) + tab login/signup
   $("btn-access").addEventListener("click", openLogin);
   $("btn-login").addEventListener("click", doLogin);
   $("btn-login-cancel").addEventListener("click", () => { $("login-modal").hidden = true; });
+  $("tab-login").addEventListener("click", () => setLoginMode("login"));
+  $("tab-signup").addEventListener("click", () => setLoginMode("signup"));
+
+  // gerbang PIC untuk form input
+  $("btn-gate").addEventListener("click", doGate);
+  $("btn-gate-cancel").addEventListener("click", () => { $("gate-modal").hidden = true; });
 }
 
 window.addEventListener("DOMContentLoaded", init);
