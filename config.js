@@ -18,4 +18,3 @@ const OPSI_KEBERJALANAN = [
   "Sesuai Rencana", "Ada Kendala", "Tidak Sesuai Rencana", "Tidak Ada Penilaian",
 ];
 const OPSI_LEVEL_ISU = ["Tidak Ada", "High", "Medium", "Low"];
-
