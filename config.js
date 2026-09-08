@@ -4,7 +4,7 @@
 
 // URL Web App dari Google Apps Script (lihat README langkah setup).
 // Selama masih kosong (""), website jalan dengan DATA CONTOH.
-const API_URL = "";
+const API_URL = "https://script.google.com/macros/s/AKfycbxPxT2o21bq86k5hg7lLM3o46Z4vNA_tlvKpdira3pxXKDC2TlJTLBHn0vJWCov1c56FQ/exec";
 
 // Daftar program -> nama sheet di Google Sheets (harus sama persis)
 const PROGRAMS = [
