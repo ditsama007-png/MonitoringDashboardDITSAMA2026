@@ -18,3 +18,10 @@ const OPSI_KEBERJALANAN = [
   "Sesuai Rencana", "Ada Kendala", "Tidak Sesuai Rencana", "Tidak Ada Penilaian",
 ];
 const OPSI_LEVEL_ISU = ["Tidak Ada", "High", "Medium", "Low"];
+
+// Akun untuk masuk ke dashboard (Add Access). Ganti sesuai kebutuhan.
+// (Catatan: ini gerbang dasar sisi-browser; untuk keamanan penuh perlu server.)
+const ACCOUNTS = {
+  "admin": "admin123",
+  "ditsama": "ditsama2026",
+};
