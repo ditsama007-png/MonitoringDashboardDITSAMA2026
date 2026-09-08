@@ -19,6 +19,25 @@ const OPSI_KEBERJALANAN = [
 ];
 const OPSI_LEVEL_ISU = ["Tidak Ada", "High", "Medium", "Low"];
 
+// Daftar jabatan (untuk dropdown saat sign up / login)
+const JABATAN = [
+  "Admin",
+  "Head Program",
+  "PIC SIAP",
+  "PIC Inspirasi Eduquest",
+  "PIC Inspirasi Sang Cendekia",
+];
+
+// Aturan akses per jabatan:
+//  programs = program input yang boleh diakses; manageUsers = boleh kelola akun
+const ROLE_ACCESS = {
+  "Admin":                        { programs: ["SIAP", "INSPIRASI_EDQ", "INSPIRASI_SCD"], manageUsers: true },
+  "Head Program":                 { programs: ["SIAP", "INSPIRASI_EDQ", "INSPIRASI_SCD"], manageUsers: false },
+  "PIC SIAP":                     { programs: ["SIAP"], manageUsers: false },
+  "PIC Inspirasi Eduquest":       { programs: ["INSPIRASI_EDQ"], manageUsers: false },
+  "PIC Inspirasi Sang Cendekia":  { programs: ["INSPIRASI_SCD"], manageUsers: false },
+};
+
 // ============================================================
 //  DAFTAR PIC TERDAFTAR
 //  Dipakai untuk: (a) login "Add Access", dan (b) gerbang akses form input.
