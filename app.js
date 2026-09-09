@@ -542,7 +542,6 @@ function demoAuth(nama, jab, email, pass, code, msg) {
 
 function loginSuccess(sess) {
   SESSION = sess;
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify(sess)); } catch (e) {}
   $("auth-gate").style.display = "none";
   applyAccess();
   setActiveNav(document.querySelector('.nav-item[data-view="dashboard"]'));
@@ -610,8 +609,9 @@ async function init() {
   $("btn-logout").addEventListener("click", logout);
   $("btn-profile-close").addEventListener("click", () => { $("profile-modal").hidden = true; });
   setAuthMode("login");
-  if (restoreSession()) { loginSuccess(SESSION); }
-  else { $("auth-gate").style.display = ""; }
+  // Selalu WAJIB login tiap buka halaman (tidak mengingat sesi lama)
+  SESSION = null;
+  $("auth-gate").style.display = "";
 
   // --- lalu muat data dashboard (dibungkus try/catch supaya tak ganggu login) ---
   try {
