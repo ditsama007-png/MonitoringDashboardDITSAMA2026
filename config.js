@@ -8,9 +8,15 @@ const API_URL = "https://script.google.com/macros/s/AKfycby7uCAReUXNXbWcQPax7RgF
 
 // Daftar program -> nama sheet di Google Sheets (harus sama persis)
 const PROGRAMS = [
-  { key: "SIAP",          label: "SIAP ITB",            sheet: "SIAP_2026" },
-  { key: "INSPIRASI_EDQ", label: "INSPIRASI EduQuest",  sheet: "INSPIRASI_Edq2026" },
-  { key: "INSPIRASI_SCD", label: "INSPIRASI SCD",       sheet: "INSPIRASI_Scd2026" },
+  { key: "SIAP",          label: "SIAP ITB",           sheet: "SIAP_2026" },
+  { key: "INSPIRASI_EDQ", label: "INSPIRASI EduQuest", sheet: "INSPIRASI_Edq2026" },
+  { key: "INSPIRASI_SCD", label: "INSPIRASI SCD",      sheet: "INSPIRASI_Scd2026" },
+  { key: "OSN",           label: "OSN",                sheet: "OSN_2026" },
+  { key: "OPSI",          label: "OPSI",               sheet: "OPSI_2026" },
+  { key: "RISET",         label: "Riset",              sheet: "Riset_2026" },
+  { key: "BTI",           label: "BTI",                sheet: "BTI_2026" },
+  { key: "WIT",           label: "WIT",                sheet: "WIT_2026" },
+  { key: "MAUNG",         label: "MAUNG",              sheet: "MAUNG_2026" },
 ];
 
 // Pilihan dropdown pada form
@@ -19,24 +25,12 @@ const OPSI_KEBERJALANAN = [
 ];
 const OPSI_LEVEL_ISU = ["Tidak Ada", "High", "Medium", "Low"];
 
-// Daftar jabatan (untuk dropdown saat sign up / login)
-const JABATAN = [
-  "Admin",
-  "Head Program",
-  "PIC SIAP",
-  "PIC Inspirasi Eduquest",
-  "PIC Inspirasi Sang Cendekia",
-];
+// Jabatan (role). Program yang dipegang dipilih terpisah saat sign up.
+const JABATAN = ["Admin", "Head Program", "PIC"];
 
-// Aturan akses per jabatan:
-//  programs = program input yang boleh diakses; manageUsers = boleh kelola akun
-const ROLE_ACCESS = {
-  "Admin":                        { programs: ["SIAP", "INSPIRASI_EDQ", "INSPIRASI_SCD"], manageUsers: true },
-  "Head Program":                 { programs: ["SIAP", "INSPIRASI_EDQ", "INSPIRASI_SCD"], manageUsers: false },
-  "PIC SIAP":                     { programs: ["SIAP"], manageUsers: false },
-  "PIC Inspirasi Eduquest":       { programs: ["INSPIRASI_EDQ"], manageUsers: false },
-  "PIC Inspirasi Sang Cendekia":  { programs: ["INSPIRASI_SCD"], manageUsers: false },
-};
+// Jabatan yang otomatis bisa akses SEMUA program.
+// Selain ini (PIC), aksesnya = program yang dipilih saat sign up.
+const ALL_ACCESS_ROLES = ["Admin", "Head Program"];
 
 // ============================================================
 //  DAFTAR PIC TERDAFTAR
