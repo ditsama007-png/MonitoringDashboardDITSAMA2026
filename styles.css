@@ -183,3 +183,27 @@ tbody tr:nth-child(even){background:#F8FAFD}
   gap:.5rem; margin-bottom:.4rem; }
 .access-box .gate-brand .badge{ background:var(--navy); color:#fff; border-radius:8px; padding:.2rem .45rem; }
 .access-box label{ margin:.6rem 0; }
+
+/* pilihan program (checkbox) saat sign up */
+.prog-title{font-size:.8rem;font-weight:700;color:var(--navy);margin:.2rem 0 .4rem}
+.prog-check{display:grid;grid-template-columns:1fr 1fr;gap:.15rem .8rem;
+  max-height:140px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;
+  padding:.5rem .6rem;margin-bottom:.7rem;background:#fff}
+.prog-item{display:flex !important;flex-direction:row !important;align-items:center;gap:.45rem;
+  font-size:.82rem;font-weight:500;color:var(--ink);margin:0 !important;padding:.15rem 0;cursor:pointer}
+.prog-item input{width:16px !important;height:16px;margin:0;flex:0 0 auto;}
+
+/* bar Input Data di halaman program */
+.prog-heading{margin:0 0 .1rem;font-size:1.4rem;color:var(--navy);font-weight:800}
+.input-bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  background:#EEF3FA;border:1px solid var(--line);border-radius:12px;padding:.7rem 1rem;margin:1rem 0}
+.input-label{font-weight:700;color:var(--navy);font-size:1rem}
+
+/* dropdown pilihan program (details) */
+.prog-dd{border:1px solid var(--line);border-radius:10px;margin-bottom:.5rem;background:#fff}
+.prog-dd summary{list-style:none;cursor:pointer;padding:.55rem .7rem;font-size:.85rem;
+  color:var(--navy);font-weight:600;user-select:none}
+.prog-dd summary::-webkit-details-marker{display:none}
+.prog-dd[open] summary{border-bottom:1px solid var(--line)}
+.prog-dd .prog-check{border:none;max-height:160px}
+.prog-note{font-size:.78rem;color:var(--muted);font-style:italic;margin-bottom:.6rem}
