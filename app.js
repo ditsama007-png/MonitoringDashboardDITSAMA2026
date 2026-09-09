@@ -375,6 +375,13 @@ function initSelects() {
   $("in-program").innerHTML = PROGRAMS.map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
   $("f-keberjalanan").innerHTML = ["", ...OPSI_KEBERJALANAN].map((o) => `<option>${o}</option>`).join("");
   $("f-level").innerHTML = OPSI_LEVEL_ISU.map((o) => `<option>${o}</option>`).join("");
+  // checkbox program (untuk sign up)
+  const box = $("a-programs");
+  if (box) box.innerHTML = PROGRAMS.map((p) =>
+    `<label class="prog-item"><input type="checkbox" value="${p.key}" /> ${p.label}</label>`).join("");
+}
+function getSelectedPrograms() {
+  return [...document.querySelectorAll("#a-programs input:checked")].map((c) => c.value);
 }
 
 function initToggles() {
@@ -408,8 +415,12 @@ function setActiveNav(btn) {
 }
 
 // ------------------------------------------------ akses per jabatan --------
-function accessOf(jabatan) { return ROLE_ACCESS[jabatan] || { programs: [], manageUsers: false }; }
-function canAccessProgram(key) { return SESSION ? accessOf(SESSION.jabatan).programs.includes(key) : false; }
+function isAllAccess(jab) { return (typeof ALL_ACCESS_ROLES !== "undefined") && ALL_ACCESS_ROLES.includes(jab); }
+function canAccessProgram(key) {
+  if (!SESSION) return false;
+  if (isAllAccess(SESSION.jabatan)) return true;
+  return (SESSION.programs || []).includes(key);
+}
 function applyAccess() {
   document.querySelectorAll('.nav-item[data-view]').forEach((btn) => {
     const v = btn.dataset.view;
@@ -452,6 +463,7 @@ function setAuthMode(mode) {
   // tampil/sembunyi kolom sesuai mode
   $("wrap-nama").hidden    = isForgot;                 // forgot tak butuh nama
   $("wrap-jabatan").hidden = !isSignup;
+  const wp = $("wrap-programs"); if (wp) wp.hidden = !isSignup;   // pilih program saat sign up
   $("wrap-email").hidden   = isLogin;                  // email utk signup & forgot
   $("wrap-code").hidden    = isLogin;                  // kode utk signup & forgot
   $("btn-sendcode").hidden = isLogin;                  // tombol kirim kode
@@ -497,21 +509,23 @@ async function doAuth() {
     if (!nama || !pass) { msg.textContent = "Isi nama & password."; msg.classList.add("err"); return; }
   } else if (AUTH_MODE === "signup") {
     if (!nama || !jab || !email || !pass || !code) { msg.textContent = "Lengkapi semua kolom + kode."; msg.classList.add("err"); return; }
+    if (jab === "PIC" && getSelectedPrograms().length === 0) { msg.textContent = "Pilih minimal satu program."; msg.classList.add("err"); return; }
   } else { // forgot
     if (!email || !code || !pass) { msg.textContent = "Isi email, kode, & password baru."; msg.classList.add("err"); return; }
   }
   if (!API_URL) return demoAuth(nama, jab, email, pass, code, msg);   // mode contoh
 
   const action = AUTH_MODE === "forgot" ? "reset" : AUTH_MODE;
+  const programs = getSelectedPrograms();
   msg.textContent = "Memproses...";
   try {
     const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, nama, jabatan: jab, email, password: pass, code }) });
+      body: JSON.stringify({ action, nama, jabatan: jab, email, password: pass, code, programs }) });
     const out = await res.json();
     if (!out.ok) { msg.textContent = "❌ " + (out.error || "Gagal."); msg.classList.add("err"); return; }
     if (AUTH_MODE === "signup") { msg.textContent = "✅ Terdaftar. Silakan login."; msg.classList.add("ok"); setAuthMode("login"); return; }
     if (AUTH_MODE === "forgot") { msg.textContent = "✅ Password diubah. Silakan login."; msg.classList.add("ok"); setAuthMode("login"); return; }
-    loginSuccess({ nama: out.user.nama, jabatan: out.user.jabatan, email: out.user.email, token: out.token });
+    loginSuccess({ nama: out.user.nama, jabatan: out.user.jabatan, email: out.user.email, programs: out.user.programs || [], token: out.token });
   } catch (e) { msg.textContent = "❌ Gagal terhubung ke server."; msg.classList.add("err"); }
 }
 
@@ -522,7 +536,7 @@ function demoAuth(nama, jab, email, pass, code, msg) {
   if (AUTH_MODE === "signup") {
     if (code !== DEMO_CODE || !DEMO_CODE) { msg.textContent = "Kode salah (klik Kirim kode dulu)."; msg.classList.add("err"); return; }
     if (store.some((u) => u.nama.toLowerCase() === nama.toLowerCase())) { msg.textContent = "Nama sudah terdaftar."; msg.classList.add("err"); return; }
-    store.push({ nama, jabatan: jab, email, password: pass });
+    store.push({ nama, jabatan: jab, email, password: pass, programs: getSelectedPrograms() });
     localStorage.setItem("ditsama_users", JSON.stringify(store));
     DEMO_CODE = null;
     msg.textContent = "✅ Terdaftar (demo). Silakan login."; msg.classList.add("ok"); setAuthMode("login"); return;
@@ -537,7 +551,7 @@ function demoAuth(nama, jab, email, pass, code, msg) {
   }
   const u = store.find((x) => x.nama.toLowerCase() === nama.toLowerCase() && x.password === pass);
   if (!u) { msg.textContent = "Nama/password salah, atau belum sign up."; msg.classList.add("err"); return; }
-  loginSuccess({ nama: u.nama, jabatan: u.jabatan, email: u.email, token: "demo" });
+  loginSuccess({ nama: u.nama, jabatan: u.jabatan, email: u.email, programs: u.programs || [], token: "demo" });
 }
 
 function loginSuccess(sess) {
@@ -587,12 +601,13 @@ function logout() {
 
 function openProfile() {
   if (!SESSION) { $("auth-gate").style.display = ""; return; }
-  const acc = accessOf(SESSION.jabatan);
+  const progText = isAllAccess(SESSION.jabatan)
+    ? "Semua program"
+    : ((SESSION.programs || []).map(labelOf).join(", ") || "-");
   $("profile-info").innerHTML =
     "<b>" + SESSION.nama + "</b><br>Jabatan: " + SESSION.jabatan +
     "<br>Email: " + (SESSION.email || "-") +
-    "<br>Akses program: " + (acc.programs.map(labelOf).join(", ") || "-") +
-    (acc.manageUsers ? "<br>Hak: kelola akun (Admin)" : "");
+    "<br>Akses program: " + progText;
   $("profile-modal").hidden = false;
 }
 
