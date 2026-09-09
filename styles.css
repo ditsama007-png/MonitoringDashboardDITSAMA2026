@@ -170,7 +170,9 @@ tbody tr:nth-child(even){background:#F8FAFD}
 [hidden]{display:none !important;}
 
 /* ===== Overlay blur + popup Password Akses (setelah login) ===== */
-.app.blurred{ filter:blur(7px); pointer-events:none; user-select:none; }
+.app.blurred .rail, .app.blurred .control, .app.blurred .stage{
+  filter:blur(7px); pointer-events:none; user-select:none;
+}
 .access-overlay{ position:fixed; inset:0; z-index:120;
   background:rgba(20,35,60,.35);
   display:flex; align-items:center; justify-content:center; padding:1rem; }
