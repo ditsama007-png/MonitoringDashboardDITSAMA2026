@@ -556,15 +556,25 @@ function askAccessPassword() {
   $("acc-msg").textContent = ""; $("acc-msg").className = "save-msg";
   $("access-overlay").hidden = false;
 }
-function checkAccessPassword() {
+async function checkAccessPassword() {
   const val = $("acc-pass").value;
   const msg = $("acc-msg");
-  if (val === ACCESS_PASSWORD) {
-    $("access-overlay").hidden = true;
-    $("app").classList.remove("blurred");
-  } else {
-    msg.textContent = "Password Akses salah."; msg.className = "save-msg err";
+  if (!API_URL) {   // mode demo (tanpa server): langsung buka, tak ada cek password
+    unlockDashboard();
+    return;
   }
+  msg.textContent = "Memeriksa..."; msg.className = "save-msg";
+  try {
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "check_access", password: val }) });
+    const out = await res.json();
+    if (out.ok) { unlockDashboard(); }
+    else { msg.textContent = "Password Akses salah."; msg.className = "save-msg err"; }
+  } catch (e) { msg.textContent = "Gagal terhubung ke server."; msg.className = "save-msg err"; }
+}
+function unlockDashboard() {
+  $("access-overlay").hidden = true;
+  $("app").classList.remove("blurred");
 }
 
 function logout() {
@@ -611,6 +621,7 @@ async function init() {
   setAuthMode("login");
   // Selalu WAJIB login tiap buka halaman (tidak mengingat sesi lama)
   SESSION = null;
+  try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
   $("auth-gate").style.display = "";
 
   // --- lalu muat data dashboard (dibungkus try/catch supaya tak ganggu login) ---
