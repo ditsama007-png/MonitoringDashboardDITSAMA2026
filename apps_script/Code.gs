@@ -101,6 +101,8 @@ function doPost(e) {
 
     if (body.action === "signup") return handleSignup_(body);
     if (body.action === "login")  return handleLogin_(body);
+    if (body.action === "send_code") return handleSendCode_(body);
+    if (body.action === "reset")  return handleReset_(body);
     if (body.action !== "write")  return json_({ ok: false, error: "aksi tidak dikenal" });
 
     // --- write: verifikasi token login ---
@@ -225,13 +227,57 @@ function findUser_(nama) {
   }
   return null;
 }
+function findUserByEmail_(email) {
+  var sh = usersSheet_();
+  var last = sh.getLastRow();
+  if (last < 2) return null;
+  var data = sh.getRange(2, 1, last - 1, 5).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][2]).toLowerCase() === String(email).toLowerCase()) {
+      return { row: i + 2, nama: data[i][0], jabatan: data[i][1], email: data[i][2], hash: data[i][3] };
+    }
+  }
+  return null;
+}
+function checkCode_(email, code) {
+  var v = CacheService.getScriptCache().get("code_" + String(email).toLowerCase());
+  return v && v === String(code);
+}
+function handleSendCode_(b) {
+  var email = String(b.email || "").trim().toLowerCase();
+  var purpose = b.purpose || "signup";
+  if (!email) return json_({ ok: false, error: "Email kosong." });
+  if (purpose === "reset" && !findUserByEmail_(email))
+    return json_({ ok: false, error: "Email tidak terdaftar." });
+  if (purpose === "signup" && findUserByEmail_(email))
+    return json_({ ok: false, error: "Email sudah terdaftar." });
+  var code = String(Math.floor(100000 + Math.random() * 900000));
+  CacheService.getScriptCache().put("code_" + email, code, 900);   // 15 menit
+  MailApp.sendEmail(email, "Kode Verifikasi Dashboard DITSAMA",
+    "Kode verifikasi Anda: " + code + "\n\nKode berlaku 15 menit. " +
+    "Abaikan email ini jika Anda tidak meminta.");
+  return json_({ ok: true });
+}
 function handleSignup_(b) {
   var nama = String(b.nama || "").trim(), jab = String(b.jabatan || "").trim(),
-      email = String(b.email || "").trim(), pass = String(b.password || "");
+      email = String(b.email || "").trim(), pass = String(b.password || ""), code = b.code;
   if (!nama || !jab || !email || !pass) return json_({ ok: false, error: "Lengkapi semua kolom." });
   if (!ROLE_ACCESS[jab]) return json_({ ok: false, error: "Jabatan tidak dikenal." });
   if (findUser_(nama)) return json_({ ok: false, error: "Nama sudah terdaftar." });
+  if (findUserByEmail_(email)) return json_({ ok: false, error: "Email sudah terdaftar." });
+  if (!checkCode_(email, code)) return json_({ ok: false, error: "Kode verifikasi salah / kedaluwarsa." });
   usersSheet_().appendRow([nama, jab, email, hash_(pass), new Date()]);
+  CacheService.getScriptCache().remove("code_" + email.toLowerCase());
+  return json_({ ok: true });
+}
+function handleReset_(b) {
+  var email = String(b.email || "").trim().toLowerCase(), code = b.code, np = String(b.password || "");
+  if (!np) return json_({ ok: false, error: "Password baru kosong." });
+  if (!checkCode_(email, code)) return json_({ ok: false, error: "Kode salah / kedaluwarsa." });
+  var u = findUserByEmail_(email);
+  if (!u) return json_({ ok: false, error: "Email tidak ditemukan." });
+  usersSheet_().getRange(u.row, 4).setValue(hash_(np));   // kolom 4 = PasswordHash
+  CacheService.getScriptCache().remove("code_" + email);
   return json_({ ok: true });
 }
 function handleLogin_(b) {
