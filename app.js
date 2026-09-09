@@ -441,56 +441,99 @@ function showView(view) {
 // -------------------------------------------------------- AUTH -------------
 let SESSION = null;            // {nama, jabatan, email, token}
 let AUTH_MODE = "login";
+let DEMO_CODE = null;
 const SESSION_KEY = "ditsama_session";
 
 function setAuthMode(mode) {
-  AUTH_MODE = mode;
-  $("tab-login").classList.toggle("active", mode === "login");
-  $("tab-signup").classList.toggle("active", mode === "signup");
-  $("wrap-jabatan").hidden = (mode === "login");   // login cukup nama+password
-  $("wrap-email").hidden = (mode === "login");
-  $("auth-sub").textContent = mode === "login"
-    ? "Masuk cukup dengan nama & password."
-    : "Daftar akun baru (sekali saja): nama, jabatan, email & password.";
-  $("btn-auth").textContent = mode === "login" ? "Masuk" : "Daftar";
+  AUTH_MODE = mode;   // "login" | "signup" | "forgot"
+  const isLogin = mode === "login", isSignup = mode === "signup", isForgot = mode === "forgot";
+  $("tab-login").classList.toggle("active", isLogin);
+  $("tab-signup").classList.toggle("active", isSignup);
+  // tampil/sembunyi kolom sesuai mode
+  $("wrap-nama").hidden    = isForgot;                 // forgot tak butuh nama
+  $("wrap-jabatan").hidden = !isSignup;
+  $("wrap-email").hidden   = isLogin;                  // email utk signup & forgot
+  $("wrap-code").hidden    = isLogin;                  // kode utk signup & forgot
+  $("btn-sendcode").hidden = isLogin;                  // tombol kirim kode
+  $("wrap-pass").hidden    = false;
+  $("link-forgot").hidden  = !isLogin;
+  $("link-backlogin").hidden = isLogin;
+  $("a-pass").placeholder = isForgot ? "password BARU" : "password";
+  $("auth-sub").textContent =
+    isLogin  ? "Masuk cukup dengan nama/username & password." :
+    isSignup ? "Daftar: isi data, klik 'Kirim kode', masukkan kode dari email, lalu Daftar." :
+               "Lupa password: masukkan email, klik 'Kirim kode', lalu isi kode + password baru.";
+  $("btn-auth").textContent = isLogin ? "Masuk" : isSignup ? "Daftar" : "Reset Password";
+  $("auth-msg").textContent = "";
+}
+
+// kirim kode verifikasi ke email
+async function sendCode() {
+  const email = $("a-email").value.trim();
+  const msg = $("auth-msg"); msg.textContent = ""; msg.className = "save-msg";
+  if (!email) { msg.textContent = "Isi email dulu."; msg.classList.add("err"); return; }
+  const purpose = (AUTH_MODE === "forgot") ? "reset" : "signup";
+  if (!API_URL) {   // demo: tampilkan kode via alert
+    DEMO_CODE = String(Math.floor(100000 + Math.random() * 900000));
+    alert("MODE DEMO — kode verifikasi kamu: " + DEMO_CODE + "\n(Di versi asli, ini dikirim ke email.)");
+    msg.textContent = "Kode dikirim (demo). Cek popup."; msg.classList.add("ok"); return;
+  }
+  msg.textContent = "Mengirim kode...";
+  try {
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "send_code", email, purpose }) });
+    const out = await res.json();
+    if (out.ok) { msg.textContent = "✅ Kode terkirim ke email. Cek inbox/spam."; msg.classList.add("ok"); }
+    else { msg.textContent = "❌ " + (out.error || "Gagal kirim kode."); msg.classList.add("err"); }
+  } catch (e) { msg.textContent = "❌ Gagal terhubung ke server."; msg.classList.add("err"); }
 }
 
 async function doAuth() {
   const nama = $("a-nama").value.trim(), jab = $("a-jabatan").value,
-        email = $("a-email").value.trim(), pass = $("a-pass").value;
+        email = $("a-email").value.trim(), pass = $("a-pass").value, code = $("a-code").value.trim();
   const msg = $("auth-msg"); msg.textContent = ""; msg.className = "save-msg";
-  // login cukup nama+password; sign up butuh semua
-  if (AUTH_MODE === "signup") {
-    if (!nama || !jab || !email || !pass) { msg.textContent = "Lengkapi semua kolom."; msg.classList.add("err"); return; }
-  } else {
-    if (!nama || !pass) { msg.textContent = "Isi nama & password."; msg.classList.add("err"); return; }
-  }
-  if (!API_URL) return demoAuth(nama, jab, email, pass, msg);   // mode contoh
 
+  if (AUTH_MODE === "login") {
+    if (!nama || !pass) { msg.textContent = "Isi nama & password."; msg.classList.add("err"); return; }
+  } else if (AUTH_MODE === "signup") {
+    if (!nama || !jab || !email || !pass || !code) { msg.textContent = "Lengkapi semua kolom + kode."; msg.classList.add("err"); return; }
+  } else { // forgot
+    if (!email || !code || !pass) { msg.textContent = "Isi email, kode, & password baru."; msg.classList.add("err"); return; }
+  }
+  if (!API_URL) return demoAuth(nama, jab, email, pass, code, msg);   // mode contoh
+
+  const action = AUTH_MODE === "forgot" ? "reset" : AUTH_MODE;
   msg.textContent = "Memproses...";
   try {
-    const res = await fetch(API_URL, {
-      method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: AUTH_MODE, nama, jabatan: jab, email, password: pass }),
-    });
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action, nama, jabatan: jab, email, password: pass, code }) });
     const out = await res.json();
     if (!out.ok) { msg.textContent = "❌ " + (out.error || "Gagal."); msg.classList.add("err"); return; }
     if (AUTH_MODE === "signup") { msg.textContent = "✅ Terdaftar. Silakan login."; msg.classList.add("ok"); setAuthMode("login"); return; }
+    if (AUTH_MODE === "forgot") { msg.textContent = "✅ Password diubah. Silakan login."; msg.classList.add("ok"); setAuthMode("login"); return; }
     loginSuccess({ nama: out.user.nama, jabatan: out.user.jabatan, email: out.user.email, token: out.token });
   } catch (e) { msg.textContent = "❌ Gagal terhubung ke server."; msg.classList.add("err"); }
 }
 
-// mode contoh: simpan akun di localStorage browser
-function demoAuth(nama, jab, email, pass, msg) {
+// mode contoh (localStorage + kode DEMO_CODE)
+function demoAuth(nama, jab, email, pass, code, msg) {
   let store = [];
   try { store = JSON.parse(localStorage.getItem("ditsama_users") || "[]"); } catch (e) {}
   if (AUTH_MODE === "signup") {
-    if (store.some((u) => u.nama.toLowerCase() === nama.toLowerCase())) {
-      msg.textContent = "Nama sudah terdaftar."; msg.classList.add("err"); return;
-    }
+    if (code !== DEMO_CODE || !DEMO_CODE) { msg.textContent = "Kode salah (klik Kirim kode dulu)."; msg.classList.add("err"); return; }
+    if (store.some((u) => u.nama.toLowerCase() === nama.toLowerCase())) { msg.textContent = "Nama sudah terdaftar."; msg.classList.add("err"); return; }
     store.push({ nama, jabatan: jab, email, password: pass });
     localStorage.setItem("ditsama_users", JSON.stringify(store));
+    DEMO_CODE = null;
     msg.textContent = "✅ Terdaftar (demo). Silakan login."; msg.classList.add("ok"); setAuthMode("login"); return;
+  }
+  if (AUTH_MODE === "forgot") {
+    if (code !== DEMO_CODE || !DEMO_CODE) { msg.textContent = "Kode salah (klik Kirim kode dulu)."; msg.classList.add("err"); return; }
+    const idx = store.findIndex((u) => (u.email || "").toLowerCase() === email.toLowerCase());
+    if (idx < 0) { msg.textContent = "Email tidak terdaftar."; msg.classList.add("err"); return; }
+    store[idx].password = pass; localStorage.setItem("ditsama_users", JSON.stringify(store));
+    DEMO_CODE = null;
+    msg.textContent = "✅ Password diubah (demo). Silakan login."; msg.classList.add("ok"); setAuthMode("login"); return;
   }
   const u = store.find((x) => x.nama.toLowerCase() === nama.toLowerCase() && x.password === pass);
   if (!u) { msg.textContent = "Nama/password salah, atau belum sign up."; msg.classList.add("err"); return; }
@@ -548,6 +591,9 @@ async function init() {
   $("tab-login").addEventListener("click", () => setAuthMode("login"));
   $("tab-signup").addEventListener("click", () => setAuthMode("signup"));
   $("btn-auth").addEventListener("click", doAuth);
+  $("btn-sendcode").addEventListener("click", sendCode);
+  $("link-forgot").addEventListener("click", (e) => { e.preventDefault(); setAuthMode("forgot"); });
+  $("link-backlogin").addEventListener("click", (e) => { e.preventDefault(); setAuthMode("login"); });
   $("btn-access").addEventListener("click", openProfile);
   $("btn-logout").addEventListener("click", logout);
   $("btn-profile-close").addEventListener("click", () => { $("profile-modal").hidden = true; });
