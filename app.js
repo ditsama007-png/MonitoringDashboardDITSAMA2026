@@ -377,11 +377,27 @@ function initSelects() {
   $("f-level").innerHTML = OPSI_LEVEL_ISU.map((o) => `<option>${o}</option>`).join("");
   // checkbox program (untuk sign up)
   const box = $("a-programs");
-  if (box) box.innerHTML = PROGRAMS.map((p) =>
-    `<label class="prog-item"><input type="checkbox" value="${p.key}" /> ${p.label}</label>`).join("");
+  if (box) {
+    box.innerHTML = PROGRAMS.map((p) =>
+      `<label class="prog-item"><input type="checkbox" value="${p.key}" /> ${p.label}</label>`).join("");
+    box.addEventListener("change", updateProgSummary);
+  }
+}
+function updateProgSummary() {
+  const n = getSelectedPrograms().length;
+  const s = $("prog-summary");
+  if (s) s.textContent = n ? (n + " program dipilih") : "Pilih program (klik untuk buka)…";
 }
 function getSelectedPrograms() {
   return [...document.querySelectorAll("#a-programs input:checked")].map((c) => c.value);
+}
+// Pilihan program hanya muncul saat SIGN UP dan jabatan = PIC
+// (Admin & Head Program otomatis akses semua program).
+function updateProgramVisibility() {
+  const wp = $("wrap-programs"); if (!wp) return;
+  const isSignup = (AUTH_MODE === "signup");
+  const jab = $("a-jabatan") ? $("a-jabatan").value : "";
+  wp.hidden = !(isSignup && jab === "PIC");
 }
 
 function initToggles() {
@@ -444,9 +460,24 @@ function showView(view) {
   } else {
     $("in-program").value = view;
     const p = programByKey(view);
-    $("form-title").textContent = "Form Input · " + (p ? p.label : view);
+    $("form-title").textContent = p ? p.label : view;
+    if ($("form-fields")) $("form-fields").hidden = true;   // form tersembunyi dulu
+    if ($("btn-show-form")) $("btn-show-form").textContent = "➕ Input Data Baru";
     renderTable();
+    renderProgramDash(view);
   }
+}
+
+// KPI mini-dashboard khusus satu program
+function renderProgramDash(key) {
+  const rows = (DATA[key] || []).map((r) => ({ ...r, _prog: key }));
+  let ang = 0, real = 0, act = 0;
+  rows.forEach((r) => { ang += +r.anggaran || 0; real += +r.realisasi || 0; act += +r.actual || 0; });
+  const prog = Math.round(programProgress(rows) * 100);
+  if ($("pk-progress")) $("pk-progress").textContent = prog + "%";
+  if ($("pk-anggaran")) $("pk-anggaran").textContent = fmtRupiah(ang);
+  if ($("pk-realisasi")) $("pk-realisasi").textContent = fmtRupiah(real);
+  if ($("pk-peserta")) $("pk-peserta").textContent = act.toLocaleString("id-ID");
 }
 
 // -------------------------------------------------------- AUTH -------------
@@ -463,7 +494,7 @@ function setAuthMode(mode) {
   // tampil/sembunyi kolom sesuai mode
   $("wrap-nama").hidden    = isForgot;                 // forgot tak butuh nama
   $("wrap-jabatan").hidden = !isSignup;
-  const wp = $("wrap-programs"); if (wp) wp.hidden = !isSignup;   // pilih program saat sign up
+  updateProgramVisibility();                           // pilihan program hanya untuk PIC
   $("wrap-email").hidden   = isLogin;                  // email utk signup & forgot
   $("wrap-code").hidden    = isLogin;                  // kode utk signup & forgot
   $("btn-sendcode").hidden = isLogin;                  // tombol kirim kode
@@ -629,6 +660,13 @@ async function init() {
   $("link-forgot").addEventListener("click", (e) => { e.preventDefault(); setAuthMode("forgot"); });
   $("link-backlogin").addEventListener("click", (e) => { e.preventDefault(); setAuthMode("login"); });
   $("btn-access").addEventListener("click", openProfile);
+  $("a-jabatan").addEventListener("change", updateProgramVisibility);
+  $("btn-show-form").addEventListener("click", () => {
+    const ff = $("form-fields");
+    ff.hidden = !ff.hidden;
+    $("btn-show-form").textContent = ff.hidden ? "➕ Input Data Baru" : "✖ Tutup Form";
+    if (!ff.hidden) ff.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
   $("btn-acc").addEventListener("click", checkAccessPassword);
   $("acc-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") checkAccessPassword(); });
   $("btn-logout").addEventListener("click", logout);
