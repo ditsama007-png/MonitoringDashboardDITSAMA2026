@@ -577,17 +577,8 @@ async function init() {
   initSelects();
   initToggles();
   $("a-jabatan").innerHTML = JABATAN.map((j) => `<option>${j}</option>`).join("");
-  await loadData();
-  rebuildFilters();
-  render();
 
-  $("btn-simpan").addEventListener("click", simpan);
-  $("in-program").addEventListener("change", renderTable);
-  $("btn-refresh").addEventListener("click", async () => { await loadData(); rebuildFilters(); renderTable(); render(); });
-  ["flt-program", "flt-bulan", "flt-kegiatan", "flt-level"].forEach((id) =>
-    $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
-
-  // auth
+  // --- AUTH dulu (biar form login langsung benar, tak tergantung data) ---
   $("tab-login").addEventListener("click", () => setAuthMode("login"));
   $("tab-signup").addEventListener("click", () => setAuthMode("signup"));
   $("btn-auth").addEventListener("click", doAuth);
@@ -598,10 +589,21 @@ async function init() {
   $("btn-logout").addEventListener("click", logout);
   $("btn-profile-close").addEventListener("click", () => { $("profile-modal").hidden = true; });
   setAuthMode("login");
-
-  // sesi tersimpan? -> langsung masuk; kalau belum -> tampilkan gerbang login
   if (restoreSession()) { loginSuccess(SESSION); }
   else { $("auth-gate").style.display = ""; }
+
+  // --- lalu muat data dashboard (dibungkus try/catch supaya tak ganggu login) ---
+  try {
+    await loadData();
+    rebuildFilters();
+    render();
+  } catch (e) { console.error("Gagal muat data:", e); }
+
+  $("btn-simpan").addEventListener("click", simpan);
+  $("in-program").addEventListener("change", renderTable);
+  $("btn-refresh").addEventListener("click", async () => { await loadData(); rebuildFilters(); renderTable(); render(); });
+  ["flt-program", "flt-bulan", "flt-kegiatan", "flt-level"].forEach((id) =>
+    $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
 }
 
 window.addEventListener("DOMContentLoaded", init);
