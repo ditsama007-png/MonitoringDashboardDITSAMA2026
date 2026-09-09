@@ -1,0 +1,47 @@
+:root{--navy:#2d4d78;--navy2:#22456f;--ink:#1A2233;--muted:#6B7688;--bg:#F4F6FB}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{text-decoration:none}
+
+/* ---------------- HERO ---------------- */
+.hero{max-width:1100px;margin:1.2rem auto;background:#fff;border-radius:20px;overflow:hidden;
+  box-shadow:0 12px 40px rgba(27,58,107,.12)}
+.hero-title{background:var(--navy);color:#fff;text-align:center;font-weight:800;
+  font-size:2.6rem;letter-spacing:.02em;padding:1.1rem;border-radius:0 0 22px 22px}
+.logo-area{display:flex;align-items:center;justify-content:center;padding:2.4rem 1rem;background:#fff}
+.logo-img{max-width:min(520px,80%);height:auto}
+.logo-text{text-align:center;line-height:1.15}
+.logo-text .lt-1{display:block;color:#E8862B;font-size:1.9rem;font-weight:700}
+.logo-text .lt-2{display:block;color:var(--navy);font-size:1.9rem;font-weight:800}
+
+/* menu 3 ikon */
+.menu-bar{background:var(--navy);display:flex;justify-content:center;gap:clamp(1.5rem,8vw,6rem);
+  padding:2.4rem 1rem;border-radius:22px 22px 0 0}
+.menu-item{background:transparent;border:none;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;gap:.7rem;color:#fff;font-weight:700;font-size:1.05rem;transition:transform .15s}
+.menu-item:hover{transform:translateY(-4px)}
+.menu-item .ic{display:flex;align-items:center;justify-content:center}
+.menu-item .lbl{color:#fff}
+
+/* batik strip */
+.batik{height:64px;background-color:var(--navy);
+  background-image:radial-gradient(circle at 12px 12px, rgba(255,255,255,.35) 3px, transparent 4px),
+    radial-gradient(circle at 0 0, rgba(255,255,255,.18) 6px, transparent 7px);
+  background-size:24px 24px;border-top:2px solid rgba(255,255,255,.25)}
+
+/* ---------------- SECTIONS ---------------- */
+.section{max-width:900px;margin:2rem auto;background:#fff;border-radius:16px;padding:1.6rem 1.8rem;
+  box-shadow:0 6px 20px rgba(27,58,107,.06)}
+.section.alt{background:#eef3fa}
+.section h2{color:var(--navy);margin:0 0 .6rem;font-size:1.5rem}
+.section p{line-height:1.6;margin:.4rem 0}
+.muted{color:var(--muted);font-size:.92rem}
+.btn-back{display:inline-block;margin-top:.8rem;color:var(--navy);font-weight:700}
+.foot{text-align:center;color:var(--muted);font-size:.82rem;padding:1.5rem}
+
+@media(max-width:560px){
+  .hero-title{font-size:1.9rem}
+  .menu-bar{gap:1.4rem;padding:1.6rem 1rem}
+  .logo-text .lt-1,.logo-text .lt-2{font-size:1.3rem}
+}
