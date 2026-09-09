@@ -154,3 +154,8 @@ tbody tr:nth-child(even){background:#F8FAFD}
 .gate-brand .badge{background:var(--navy);color:#fff;border-radius:8px;padding:.2rem .45rem}
 .gate .btn-primary.wide,.wide{width:100%;margin-top:.4rem}
 .gate label{margin-bottom:.7rem}
+
+/* menu Home di rail (link ke halaman home) */
+.nav-home{display:block;background:rgba(255,255,255,.10);color:#fff;text-decoration:none;
+  font-weight:800;font-size:.95rem;padding:.55rem .7rem;border-radius:22px;margin-bottom:.5rem}
+.nav-home:hover{background:rgba(255,255,255,.2)}
