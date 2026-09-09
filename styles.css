@@ -165,3 +165,6 @@ tbody tr:nth-child(even){background:#F8FAFD}
 .gate-links a{color:#2F6FB0;font-size:.85rem;font-weight:600;text-decoration:none}
 .gate-links a:hover{text-decoration:underline}
 .wide{width:100%}
+
+/* PENTING: atribut hidden harus mengalahkan display:flex pada label/tombol */
+[hidden]{display:none !important;}
