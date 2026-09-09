@@ -46,3 +46,54 @@ a{text-decoration:none}
   .menu-bar{gap:1.4rem;padding:1.6rem 1rem}
   .logo-text .lt-1,.logo-text .lt-2{font-size:1.3rem}
 }
+
+/* ============ ANIMASI FLOATING & BUBBLE ============ */
+
+/* Logo: melayang naik-turun halus (tanpa bubble) */
+.logo-img, .logo-text{
+  animation: floatY 4.5s ease-in-out infinite;
+}
+@keyframes floatY{
+  0%,100%{ transform: translateY(0); }
+  50%    { transform: translateY(-14px); }
+}
+
+/* Menu jadi gelembung bulat ngeblur yang melayang */
+.menu-bar{ align-items:center; }
+.menu-item{
+  position:relative;
+  width:120px; height:120px;
+  justify-content:center;
+  border-radius:50%;
+  background:rgba(255,255,255,.14);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,.35);
+  box-shadow:0 8px 24px rgba(0,0,0,.18), inset 0 0 18px rgba(255,255,255,.18);
+  animation: bubble 6s ease-in-out infinite;
+  transition:transform .2s, box-shadow .2s;
+}
+/* tiap bubble gerak beda ritme biar natural */
+.menu-item:nth-child(1){ animation-delay:0s;   }
+.menu-item:nth-child(2){ animation-delay:1.2s; }
+.menu-item:nth-child(3){ animation-delay:2.4s; }
+.menu-item .lbl{ position:absolute; bottom:-1.7rem; }
+.menu-item:hover{
+  transform:translateY(-8px) scale(1.06);
+  box-shadow:0 14px 30px rgba(0,0,0,.28), inset 0 0 22px rgba(255,255,255,.28);
+}
+@keyframes bubble{
+  0%   { transform: translateY(0)     rotate(0deg); }
+  25%  { transform: translateY(-12px) rotate(1.5deg); }
+  50%  { transform: translateY(4px)   rotate(0deg); }
+  75%  { transform: translateY(-8px)  rotate(-1.5deg); }
+  100% { transform: translateY(0)     rotate(0deg); }
+}
+
+/* beri ruang bawah utk label yang keluar dari bubble */
+.menu-bar{ padding-bottom:3rem; }
+
+/* hormati pengguna yang mematikan animasi */
+@media (prefers-reduced-motion: reduce){
+  .logo-img,.logo-text,.menu-item{ animation:none; }
+}
