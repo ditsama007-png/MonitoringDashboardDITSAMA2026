@@ -19,10 +19,6 @@ const OPSI_KEBERJALANAN = [
 ];
 const OPSI_LEVEL_ISU = ["Tidak Ada", "High", "Medium", "Low"];
 
-// Password akses umum untuk LOGIN (kunci gerbang untuk semua orang internal).
-// Hanya yang tahu password ini yang bisa masuk, selain akun pribadinya.
-const ACCESS_PASSWORD = "Ditsama_30";
-
 // Daftar jabatan (untuk dropdown saat sign up / login)
 const JABATAN = [
   "Admin",
