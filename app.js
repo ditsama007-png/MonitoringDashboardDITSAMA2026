@@ -547,6 +547,25 @@ function loginSuccess(sess) {
   applyAccess();
   setActiveNav(document.querySelector('.nav-item[data-view="dashboard"]'));
   showView("dashboard");
+  // tampilkan overlay blur + minta Password Akses dulu
+  askAccessPassword();
+}
+
+function askAccessPassword() {
+  $("app").classList.add("blurred");
+  $("acc-pass").value = "";
+  $("acc-msg").textContent = ""; $("acc-msg").className = "save-msg";
+  $("access-overlay").hidden = false;
+}
+function checkAccessPassword() {
+  const val = $("acc-pass").value;
+  const msg = $("acc-msg");
+  if (val === ACCESS_PASSWORD) {
+    $("access-overlay").hidden = true;
+    $("app").classList.remove("blurred");
+  } else {
+    msg.textContent = "Password Akses salah."; msg.className = "save-msg err";
+  }
 }
 
 function logout() {
@@ -586,6 +605,8 @@ async function init() {
   $("link-forgot").addEventListener("click", (e) => { e.preventDefault(); setAuthMode("forgot"); });
   $("link-backlogin").addEventListener("click", (e) => { e.preventDefault(); setAuthMode("login"); });
   $("btn-access").addEventListener("click", openProfile);
+  $("btn-acc").addEventListener("click", checkAccessPassword);
+  $("acc-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") checkAccessPassword(); });
   $("btn-logout").addEventListener("click", logout);
   $("btn-profile-close").addEventListener("click", () => { $("profile-modal").hidden = true; });
   setAuthMode("login");
