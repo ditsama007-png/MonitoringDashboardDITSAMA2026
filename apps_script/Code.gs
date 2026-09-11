@@ -109,6 +109,7 @@ function doPost(e) {
     if (body.action === "read_flex")  return handleReadFlex_(body);
     if (body.action === "delete_flex") return handleDeleteFlex_(body);
     if (body.action === "update_flex") return handleUpdateFlex_(body);
+    if (body.action === "upload_sk")  return handleUploadSK_(body);
     if (body.action !== "write")  return json_({ ok: false, error: "aksi tidak dikenal" });
 
     // --- write: verifikasi token login ---
@@ -443,6 +444,31 @@ function handleUpdateFlex_(b) {
     if (c !== undefined) sh.getRange(r, c + 1).setValue(record[k]);
   });
   return json_({ ok: true });
+}
+
+// ---- Upload SK ke Google Drive (folder tetap by ID) ----
+var SK_FOLDER_ID = "1vukq52oLRFKJkOoGNMHRxENxV2nRBC-M";   // folder tujuan SK
+var SK_FOLDER_NAME = "DITSAMA - SK Upload";               // cadangan kalau ID gagal
+function getSKFolder_() {
+  try { return DriveApp.getFolderById(SK_FOLDER_ID); }
+  catch (e) {
+    var it = DriveApp.getFoldersByName(SK_FOLDER_NAME);
+    return it.hasNext() ? it.next() : DriveApp.createFolder(SK_FOLDER_NAME);
+  }
+}
+function handleUploadSK_(b) {
+  var user = getUserByToken_(b.token);
+  if (!user) return json_({ ok: false, error: "Sesi tidak valid, silakan login ulang." });
+  if (!b.data) return json_({ ok: false, error: "File kosong." });
+  try {
+    var bytes = Utilities.base64Decode(b.data);
+    var blob = Utilities.newBlob(bytes, b.mime || "application/octet-stream", b.name || "SK");
+    var file = getSKFolder_().createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return json_({ ok: true, url: file.getUrl(), name: file.getName() });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
 }
 
 function json_(obj) {
