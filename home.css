@@ -97,3 +97,27 @@ a{text-decoration:none}
 @media (prefers-reduced-motion: reduce){
   .logo-img,.logo-text,.menu-item{ animation:none; }
 }
+
+
+/* ===== FIX KLIK MENU: struktur diperbaiki agar seluruh item bisa diklik ===== */
+.menu-bar{ align-items:flex-start; }
+.menu-item{
+  width:auto; height:auto; background:transparent; border:none; border-radius:0;
+  box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none;
+  display:flex; flex-direction:column; align-items:center; gap:.6rem;
+  cursor:pointer; text-decoration:none; color:#fff; animation:none; padding:0;
+}
+.menu-item .bubble{
+  width:120px; height:120px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,.14);
+  backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,.35);
+  box-shadow:0 8px 24px rgba(0,0,0,.18), inset 0 0 18px rgba(255,255,255,.18);
+  animation: bubble 6s ease-in-out infinite;
+}
+.menu-item:nth-child(1) .bubble{ animation-delay:0s; }
+.menu-item:nth-child(2) .bubble{ animation-delay:1.2s; }
+.menu-item:nth-child(3) .bubble{ animation-delay:2.4s; }
+.menu-item .lbl{ position:static; bottom:auto; color:#fff; font-weight:700; }
+.menu-item:hover .bubble{ transform:translateY(-8px) scale(1.06); }
