@@ -120,6 +120,76 @@ function render() {
   renderMilestones(rows);
   renderPivot(rows);
   renderDetail(rows);
+  renderCalendar(rows);
+}
+
+// ---- Kalender kegiatan (di dashboard) ----
+let CAL_MONTH = null;   // Date penanda bulan yang ditampilkan
+function renderCalendar(rows) {
+  const host = $("calendar"); if (!host) return;
+  const dated = rows.filter((r) => r.tanggal && !isNaN(new Date(r.tanggal)));
+  if (!CAL_MONTH) {
+    CAL_MONTH = dated.length ? new Date(dated[0].tanggal) : new Date();
+    CAL_MONTH.setDate(1);
+  }
+  const y = CAL_MONTH.getFullYear(), m = CAL_MONTH.getMonth();
+  const nm = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+  if ($("cal-title")) $("cal-title").textContent = nm[m] + " " + y;
+
+  // kegiatan per tanggal (key: YYYY-MM-DD)
+  const byDay = {};
+  dated.forEach((r) => {
+    const d = new Date(r.tanggal);
+    if (d.getFullYear() === y && d.getMonth() === m) {
+      const key = d.getDate();
+      (byDay[key] = byDay[key] || []).push(r.kegiatan || r.jenis || "Kegiatan");
+    }
+  });
+
+  const firstDay = (new Date(y, m, 1).getDay() + 6) % 7;  // Senin=0
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const hari = ["Sen","Sel","Rab","Kam","Jum","Sab","Min"];
+  let html = '<div class="cal-grid cal-head">' + hari.map((h) => `<div class="cal-dow">${h}</div>`).join("") + "</div>";
+  html += '<div class="cal-grid">';
+  for (let i = 0; i < firstDay; i++) html += '<div class="cal-cell empty"></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ev = byDay[d];
+    if (ev) {
+      html += `<div class="cal-cell has-ev" data-day="${d}"><div class="cal-num">${d}</div>` +
+        ev.slice(0, 2).map((e) => `<div class="cal-ev">${e}</div>`).join("") +
+        (ev.length > 2 ? `<div class="cal-more">+${ev.length - 2}</div>` : "") + "</div>";
+    } else {
+      html += `<div class="cal-cell"><div class="cal-num">${d}</div></div>`;
+    }
+  }
+  html += "</div>";
+  host.innerHTML = html;
+
+  // klik tanggal berkegiatan -> sorot baris di tabel detail
+  host.querySelectorAll(".cal-cell.has-ev").forEach((cell) => {
+    cell.addEventListener("click", () => {
+      const day = +cell.dataset.day;
+      const target = new Date(y, m, day).toDateString();
+      const tbody = document.querySelector("#detail-table tbody");
+      if (!tbody) return;
+      let hit = null;
+      // cari baris yang tanggalnya cocok (kolom Tanggal = kolom ke-3)
+      [...tbody.querySelectorAll("tr")].forEach((tr) => {
+        const cellDate = tr.children[2] ? tr.children[2].textContent.trim() : "";
+        if (cellDate && new Date(cellDate).toDateString() === target) hit = tr;
+      });
+      tbody.querySelectorAll("tr").forEach((tr) => (tr.style.background = ""));
+      if (hit) {
+        hit.style.background = "#FFF6CC";
+        hit.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+  });
+}
+function calShift(delta) {
+  if (!CAL_MONTH) CAL_MONTH = new Date();
+  CAL_MONTH.setMonth(CAL_MONTH.getMonth() + delta);
+  renderCalendar(rowsForFilter());
 }
 
 function renderPivot(rows) { renderPivotInto("pivot-table", rows); }
@@ -713,6 +783,8 @@ async function init() {
   $("btn-simpan").addEventListener("click", simpan);
   $("in-program").addEventListener("change", () => renderInput($("in-program").value));
   $("btn-refresh").addEventListener("click", async () => { await loadData(); rebuildFilters(); renderTable(); render(); });
+  if ($("cal-prev")) $("cal-prev").addEventListener("click", () => calShift(-1));
+  if ($("cal-next")) $("cal-next").addEventListener("click", () => calShift(1));
   ["flt-program", "flt-bulan", "flt-kegiatan", "flt-level"].forEach((id) =>
     $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
 }
