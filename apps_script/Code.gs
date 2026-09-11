@@ -103,6 +103,8 @@ function doPost(e) {
     if (body.action === "login")  return handleLogin_(body);
     if (body.action === "send_code") return handleSendCode_(body);
     if (body.action === "reset")  return handleReset_(body);
+    if (body.action === "write_flex") return handleWriteFlex_(body);
+    if (body.action === "read_flex")  return handleReadFlex_(body);
     if (body.action !== "write")  return json_({ ok: false, error: "aksi tidak dikenal" });
 
     // --- write: verifikasi token login ---
@@ -307,6 +309,80 @@ function fmtDate_(v) {
   }
   return String(v || "");
 }
+// ============================================================
+//  DATA FLEKSIBEL — sheet "DataMasuk" (kolom nambah otomatis)
+// ============================================================
+var FLEX_SHEET = "DataMasuk";
+// kolom tetap yang selalu di depan
+var FLEX_FIXED = ["Waktu Input", "Program", "PIC"];
+
+function flexSheet_(ss) {
+  var sh = ss.getSheetByName(FLEX_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(FLEX_SHEET);
+    sh.getRange(1, 1, 1, FLEX_FIXED.length).setValues([FLEX_FIXED])
+      .setFontWeight("bold").setBackground("#1B3A6B").setFontColor("#FFFFFF");
+  }
+  return sh;
+}
+
+function handleWriteFlex_(b) {
+  var user = getUserByToken_(b.token);
+  if (!user) return json_({ ok: false, error: "Sesi tidak valid, silakan login ulang." });
+
+  var record = b.record || {};
+  record["Program"] = b.program || record["Program"] || "";
+  record["PIC"] = user.nama || record["PIC"] || "";
+  record["Waktu Input"] = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
+
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sh = flexSheet_(ss);
+
+  // header saat ini
+  var lastCol = sh.getLastColumn();
+  var header = lastCol > 0 ? sh.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  var idx = {};
+  header.forEach(function (h, i) { if (h !== "") idx[String(h)] = i; });
+
+  // tambah kolom baru bila ada key yang belum ada di header
+  Object.keys(record).forEach(function (k) {
+    if (k === "") return;
+    if (idx[k] === undefined) {
+      header.push(k);
+      idx[k] = header.length - 1;
+      sh.getRange(1, header.length).setValue(k)
+        .setFontWeight("bold").setBackground("#1B3A6B").setFontColor("#FFFFFF");
+    }
+  });
+
+  // susun baris sesuai urutan header; yang kosong -> ""
+  var row = header.map(function (h) {
+    var v = record[h];
+    return (v === undefined || v === null) ? "" : v;
+  });
+  sh.appendRow(row);
+  return json_({ ok: true, columns: header.length });
+}
+
+function handleReadFlex_(b) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sh = ss.getSheetByName(FLEX_SHEET);
+  if (!sh) return json_({ ok: true, header: FLEX_FIXED, rows: [] });
+  var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+  if (lastRow < 1 || lastCol < 1) return json_({ ok: true, header: FLEX_FIXED, rows: [] });
+  var header = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h); });
+  var rows = [];
+  if (lastRow >= 2) {
+    var data = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    data.forEach(function (r) {
+      var obj = {};
+      header.forEach(function (h, i) { obj[h] = r[i]; });
+      rows.push(obj);
+    });
+  }
+  return json_({ ok: true, header: header, rows: rows });
+}
+
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
