@@ -107,6 +107,8 @@ function doPost(e) {
     if (body.action === "check_access") return json_({ ok: String(body.password || "") === ACCESS_PASSWORD });
     if (body.action === "write_flex") return handleWriteFlex_(body);
     if (body.action === "read_flex")  return handleReadFlex_(body);
+    if (body.action === "delete_flex") return handleDeleteFlex_(body);
+    if (body.action === "update_flex") return handleUpdateFlex_(body);
     if (body.action !== "write")  return json_({ ok: false, error: "aksi tidak dikenal" });
 
     // --- write: verifikasi token login ---
@@ -316,7 +318,7 @@ function fmtDate_(v) {
 // ============================================================
 var FLEX_SHEET = "DataMasuk";
 // kolom tetap yang selalu di depan
-var FLEX_FIXED = ["Waktu Input", "Program", "PIC"];
+var FLEX_FIXED = ["ID", "Waktu Input", "Program", "PIC"];
 
 function flexSheet_(ss) {
   var sh = ss.getSheetByName(FLEX_SHEET);
@@ -336,6 +338,7 @@ function handleWriteFlex_(b) {
   record["Program"] = b.program || record["Program"] || "";
   record["PIC"] = user.nama || record["PIC"] || "";
   record["Waktu Input"] = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
+  record["ID"] = record["ID"] || Utilities.getUuid();
 
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sh = flexSheet_(ss);
@@ -383,6 +386,63 @@ function handleReadFlex_(b) {
     });
   }
   return json_({ ok: true, header: header, rows: rows });
+}
+
+function flexFindRow_(sh, id) {
+  var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+  if (lastRow < 2) return -1;
+  var header = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  var idCol = header.indexOf("ID");
+  if (idCol < 0) return -1;
+  var ids = sh.getRange(2, idCol + 1, lastRow - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(id)) return i + 2;   // nomor baris di sheet
+  }
+  return -1;
+}
+
+function handleDeleteFlex_(b) {
+  var user = getUserByToken_(b.token);
+  if (!user) return json_({ ok: false, error: "Sesi tidak valid." });
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sh = ss.getSheetByName(FLEX_SHEET);
+  if (!sh) return json_({ ok: false, error: "Sheet tidak ada." });
+  var r = flexFindRow_(sh, b.id);
+  if (r < 0) return json_({ ok: false, error: "Baris tidak ditemukan." });
+  sh.deleteRow(r);
+  return json_({ ok: true });
+}
+
+function handleUpdateFlex_(b) {
+  var user = getUserByToken_(b.token);
+  if (!user) return json_({ ok: false, error: "Sesi tidak valid." });
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sh = ss.getSheetByName(FLEX_SHEET);
+  if (!sh) return json_({ ok: false, error: "Sheet tidak ada." });
+  var r = flexFindRow_(sh, b.id);
+  if (r < 0) return json_({ ok: false, error: "Baris tidak ditemukan." });
+
+  var record = b.record || {};
+  var lastCol = sh.getLastColumn();
+  var header = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  var idx = {};
+  header.forEach(function (h, i) { if (h !== "") idx[String(h)] = i; });
+  // tambah kolom baru bila ada key baru
+  Object.keys(record).forEach(function (k) {
+    if (k === "" || k === "ID") return;
+    if (idx[k] === undefined) {
+      header.push(k); idx[k] = header.length - 1;
+      sh.getRange(1, header.length).setValue(k)
+        .setFontWeight("bold").setBackground("#1B3A6B").setFontColor("#FFFFFF");
+    }
+  });
+  // set nilai per kolom
+  Object.keys(record).forEach(function (k) {
+    if (k === "ID") return;
+    var c = idx[k];
+    if (c !== undefined) sh.getRange(r, c + 1).setValue(record[k]);
+  });
+  return json_({ ok: true });
 }
 
 function json_(obj) {
