@@ -250,3 +250,11 @@ tbody tr:nth-child(even){background:#F8FAFD}
 .mini-btn.ok{background:#2F6FB0;color:#fff;border-color:#2F6FB0}
 .mini-btn.fill{background:#DCFCE7;color:#16A34A;border-color:#bbf0cf}
 .mini-btn.fill.off{background:#EEF2F9;color:#9aa3b2;border-color:#E5EAF2}
+
+/* ===== Banner Upcoming Milestone aktif ===== */
+#milestone-banner{background:#FFF6E6;border:1px solid #F5C97A;border-radius:12px;padding:.8rem 1rem;margin-bottom:1rem}
+.ms-banner-title{font-weight:800;color:#8a5a00;margin-bottom:.5rem;font-size:.9rem}
+.ms-banner-row{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  background:#fff;border:1px solid #F0D9A8;border-radius:9px;padding:.5rem .7rem;margin-bottom:.4rem;font-size:.85rem}
+.ms-banner-row .btn-primary.ms-fill{padding:.35rem .8rem;font-size:.8rem}
+.issue-row{border:1px dashed #C7D9F0;border-radius:9px;padding:.5rem .6rem;margin-bottom:.5rem}
