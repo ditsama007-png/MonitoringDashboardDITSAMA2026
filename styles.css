@@ -268,3 +268,15 @@ tbody tr:nth-child(even){background:#F8FAFD}
 .sdm-name-row .s-status a{color:#2F6FB0}
 .sdm-name-row .s-namedel{background:#FEE2E2;color:#DC2626;border:none;border-radius:7px;cursor:pointer;font-weight:700}
 .sdm-block .s-addname,.sdm-block .s-delrole{padding:.3rem .6rem;font-size:.76rem;margin-top:2px}
+
+/* ===== Badge notif & status ===== */
+.nav-item{position:relative;display:flex;justify-content:space-between;align-items:center;}
+.nav-badge{background:#DC2626;color:#fff;font-size:.7rem;font-weight:800;border-radius:5px;
+  min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;margin-left:6px}
+.notif-badge{background:#DC2626;color:#fff;font-size:.72rem;font-weight:800;border-radius:5px;padding:1px 8px}
+.ms-row{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  border:1px solid #E5EAF2;border-radius:9px;padding:.5rem .7rem;margin-bottom:6px}
+.status-badge{font-size:.7rem;font-weight:700;border-radius:6px;padding:2px 8px;white-space:nowrap}
+.st-upcoming{background:#FEF3C7;color:#8a5a00}
+.st-ongoing{background:#DBEAFE;color:#185FA5}
+.st-selesai{background:#DCFCE7;color:#16A34A}
