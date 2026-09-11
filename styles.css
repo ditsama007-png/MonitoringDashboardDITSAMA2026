@@ -224,3 +224,8 @@ tbody tr:nth-child(even){background:#F8FAFD}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-more{font-size:.66rem;color:#2F6FB0;margin-top:2px}
 @media(max-width:560px){ .cal-cell{min-height:50px} .cal-ev{font-size:.6rem} }
+
+/* ===== Kolom tambahan (input dinamis) ===== */
+.extra-box{border:1px dashed #C7D9F0;border-radius:10px;padding:.7rem .8rem;margin:.8rem 0}
+.extra-row{display:grid;grid-template-columns:1fr 1fr 34px;gap:6px;margin-bottom:6px}
+.extra-row .xcol-del{background:#FEE2E2;color:#DC2626;border:none;border-radius:8px;cursor:pointer;font-weight:700}
