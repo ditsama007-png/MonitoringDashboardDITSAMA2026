@@ -122,12 +122,14 @@ function render() {
   renderDetail(rows);
 }
 
-function renderPivot(rows) {
-  const thead = document.querySelector("#pivot-table thead");
-  const tbody = document.querySelector("#pivot-table tbody");
+function renderPivot(rows) { renderPivotInto("pivot-table", rows); }
+
+function renderPivotInto(tableId, rows, forceProgs) {
+  const thead = document.querySelector("#" + tableId + " thead");
+  const tbody = document.querySelector("#" + tableId + " tbody");
   const cols = ["Program", "Jml Kegiatan", "Total Anggaran", "Total Realisasi", "Target", "Actual", "Progress"];
   thead.innerHTML = "<tr>" + cols.map((c) => `<th>${c}</th>`).join("") + "</tr>";
-  const progs = [...new Set(rows.map((r) => r._prog))];
+  const progs = forceProgs || [...new Set(rows.map((r) => r._prog))];
   if (!progs.length) { tbody.innerHTML = `<tr><td colspan="${cols.length}" class="empty">Belum ada data.</td></tr>`; return; }
   let body = "";
   progs.forEach((k) => {
@@ -259,14 +261,16 @@ function renderMilestones(rows) {
 }
 
 // ------------------------------------------------------ tabel data form -----
-function renderTable() {
+function renderTable() { renderTableFor($("in-program").value, "data-table"); }
+
+function renderTableFor(key, tableId) {
   assignIds();
-  const key = $("in-program").value;
   const rows = DATA[key] || [];
   const cols = [["id","ID"],["tanggal","Tanggal"],["kegiatan","Kegiatan"],["anggaran","Anggaran"],
     ["realisasi","Realisasi"],["target","Target"],["actual","Actual"],["level","Level Isu"],["jenis","Milestone"]];
-  const thead = document.querySelector("#data-table thead");
-  const tbody = document.querySelector("#data-table tbody");
+  const thead = document.querySelector("#" + tableId + " thead");
+  const tbody = document.querySelector("#" + tableId + " tbody");
+  if (!thead || !tbody) return;
   thead.innerHTML = "<tr>" + cols.map((c) => `<th>${c[1]}</th>`).join("") + "</tr>";
   if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${cols.length}" class="empty">Belum ada data.</td></tr>`; return; }
   tbody.innerHTML = rows.map((r) => "<tr>" + cols.map(([k]) => {
@@ -301,7 +305,7 @@ async function simpan() {
   if (!API_URL) {   // mode demo: simpan sementara di memori
     (DATA[program] = DATA[program] || []).push({ ...payload.row });
     msg.textContent = "Tersimpan (mode contoh — belum ke Sheets)."; msg.classList.add("ok");
-    renderTable(); rebuildFilters(); render(); return;
+    renderInput(program); rebuildFilters(); return;
   }
 
   msg.textContent = "Menyimpan...";
@@ -313,7 +317,7 @@ async function simpan() {
     const out = await res.json();
     if (out.ok) {
       msg.textContent = "✅ Tersimpan ke Sheets."; msg.classList.add("ok");
-      await loadData(); renderTable(); rebuildFilters(); render();
+      await loadData(); renderInput(program); rebuildFilters();
     } else {
       msg.textContent = "❌ " + (out.error || "Gagal menyimpan."); msg.classList.add("err");
     }
@@ -410,15 +414,10 @@ function initToggles() {
   $("chev-control").addEventListener("click", toggleControl);
   $("show-control").addEventListener("click", toggleControl);
 
-  // navigasi: dashboard langsung; program -> buka form kalau punya akses
+  // navigasi: dashboard / input / program (lihat) — semua boleh dibuka
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => {
       const view = btn.dataset.view;
-      if (view === "dashboard") { setActiveNav(btn); showView("dashboard"); return; }
-      if (!canAccessProgram(view)) {
-        alert("Jabatan Anda tidak memiliki akses ke input program ini.");
-        return;
-      }
       setActiveNav(btn);
       showView(view);
     });
@@ -438,34 +437,61 @@ function canAccessProgram(key) {
   return (SESSION.programs || []).includes(key);
 }
 function applyAccess() {
-  document.querySelectorAll('.nav-item[data-view]').forEach((btn) => {
-    const v = btn.dataset.view;
-    btn.style.display = (v === "dashboard" || canAccessProgram(v)) ? "" : "none";
-  });
+  // Semua menu tampil untuk yang sudah login (program = lihat dashboard saja).
+  document.querySelectorAll('.nav-item[data-view]').forEach((btn) => { btn.style.display = ""; });
   $("access-label").textContent = SESSION ? (SESSION.nama + " · " + SESSION.jabatan) : "Profil";
 }
 
 function showView(view) {
   const isDash = view === "dashboard";
-  $("view-dash").hidden = !isDash;
-  $("view-form").hidden = isDash;
+  const isInput = view === "input";
+  const isProgram = !isDash && !isInput;
 
-  // Control (filter) & judul "Dashboard" hanya tampil di view dashboard
+  $("view-dash").hidden = !isDash;
+  $("view-input").hidden = !isInput;
+  $("view-program").hidden = !isProgram;
+
+  // Control (filter) & judul hanya di dashboard utama
   $("control").style.display = isDash ? "" : "none";
   $("show-control").style.display = isDash ? "" : "none";
   document.querySelector(".title").style.visibility = isDash ? "visible" : "hidden";
 
   if (isDash) {
     render();
+  } else if (isInput) {
+    populateInputPrograms();
+    renderInput($("in-program").value);
   } else {
-    $("in-program").value = view;
+    // dashboard per program (lihat saja)
     const p = programByKey(view);
-    $("form-title").textContent = p ? p.label : view;
-    if ($("form-fields")) $("form-fields").hidden = true;   // form tersembunyi dulu
-    if ($("btn-show-form")) $("btn-show-form").textContent = "➕ Input Data Baru";
-    renderTable();
+    $("prog-title").textContent = "Dashboard Program · " + (p ? p.label : view);
     renderProgramDash(view);
+    renderTableFor(view, "prog-table");
   }
+}
+
+// isi dropdown program di Input Data (hanya yang boleh diisi user)
+function populateInputPrograms() {
+  const sel = $("in-program");
+  const allowed = PROGRAMS.filter((p) => canAccessProgram(p.key));
+  const list = allowed.length ? allowed : [];
+  sel.innerHTML = list.map((p) => `<option value="${p.key}">${p.label}</option>`).join("")
+    || '<option value="">(tidak ada program yang bisa Anda isi)</option>';
+}
+
+// tampilkan form + pivot + tabel untuk program terpilih di Input Data
+function renderInput(key) {
+  if (!key) { return; }
+  if ($("form-fields")) $("form-fields").hidden = true;
+  if ($("btn-show-form")) $("btn-show-form").textContent = "➕ Input Data Baru";
+  renderInputPivot(key);
+  renderTableFor(key, "data-table");
+}
+
+// pivot 1 baris untuk program terpilih
+function renderInputPivot(key) {
+  const rows = (DATA[key] || []).map((r) => ({ ...r, _prog: key }));
+  renderPivotInto("input-pivot", rows, [key]);
 }
 
 // KPI mini-dashboard khusus satu program
@@ -685,7 +711,7 @@ async function init() {
   } catch (e) { console.error("Gagal muat data:", e); }
 
   $("btn-simpan").addEventListener("click", simpan);
-  $("in-program").addEventListener("change", renderTable);
+  $("in-program").addEventListener("change", () => renderInput($("in-program").value));
   $("btn-refresh").addEventListener("click", async () => { await loadData(); rebuildFilters(); renderTable(); render(); });
   ["flt-program", "flt-bulan", "flt-kegiatan", "flt-level"].forEach((id) =>
     $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
