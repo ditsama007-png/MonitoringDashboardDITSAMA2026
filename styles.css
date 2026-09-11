@@ -229,3 +229,16 @@ tbody tr:nth-child(even){background:#F8FAFD}
 .extra-box{border:1px dashed #C7D9F0;border-radius:10px;padding:.7rem .8rem;margin:.8rem 0}
 .extra-row{display:grid;grid-template-columns:1fr 1fr 34px;gap:6px;margin-bottom:6px}
 .extra-row .xcol-del{background:#FEE2E2;color:#DC2626;border:none;border-radius:8px;cursor:pointer;font-weight:700}
+
+/* ===== Form baru: mode + baris dinamis ===== */
+.mode-btn{background:#EEF2F9;border:1px solid #E5EAF2;border-radius:9px;padding:.35rem .8rem;
+  font-weight:700;font-size:.82rem;color:#1B3A6B;cursor:pointer;margin-right:4px}
+.mode-btn.active{background:#2F6FB0;color:#fff;border-color:#2F6FB0}
+.dyn-box{border:1px solid #E5EAF2;border-radius:10px;padding:.7rem .8rem;margin:.8rem 0}
+.dyn-head{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:.85rem;color:#1B3A6B;margin-bottom:.5rem}
+.dyn-head .btn-ghost{padding:.3rem .6rem;font-size:.78rem;margin:0}
+.dyn-cols{display:grid;grid-template-columns:1.4fr 1fr 1fr 30px;gap:6px;font-size:.7rem;color:#6B7688;margin-bottom:3px}
+.dyn-cols.sdm{grid-template-columns:1.2fr .8fr 1.4fr 30px}
+.dyn-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 30px;gap:6px;margin-bottom:6px}
+.dyn-row.sdm{grid-template-columns:1.2fr .8fr 1.4fr 30px}
+.dyn-row .dyn-del{background:#FEE2E2;color:#DC2626;border:none;border-radius:8px;cursor:pointer;font-weight:700}
