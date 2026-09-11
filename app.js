@@ -350,39 +350,85 @@ function renderTableFor(key, tableId) {
 }
 
 // -------------------------------------------------------- simpan form -------
+let INPUT_MODE = "ongoing";
+function setInputMode(m) {
+  INPUT_MODE = m;
+  if ($("mode-ongoing")) $("mode-ongoing").classList.toggle("active", m === "ongoing");
+  if ($("mode-milestone")) $("mode-milestone").classList.toggle("active", m === "milestone");
+  if ($("ongoing-only")) $("ongoing-only").style.display = (m === "ongoing") ? "" : "none";
+}
+function addPesertaRow(kat, ter, had) {
+  const box = $("rows-peserta"); if (!box) return;
+  const row = document.createElement("div"); row.className = "dyn-row";
+  row.innerHTML = '<input class="p-kat" placeholder="mis. SMA"><input class="p-ter" type="number" placeholder="0"><input class="p-had" type="number" placeholder="0"><button type="button" class="dyn-del">✕</button>';
+  box.appendChild(row);
+  if (kat) row.querySelector(".p-kat").value = kat;
+  if (ter) row.querySelector(".p-ter").value = ter;
+  if (had) row.querySelector(".p-had").value = had;
+  row.querySelector(".dyn-del").addEventListener("click", () => row.remove());
+}
+function addSDMRow(peran, jml, nama) {
+  const box = $("rows-sdm"); if (!box) return;
+  const row = document.createElement("div"); row.className = "dyn-row sdm";
+  row.innerHTML = '<input class="s-peran" placeholder="mis. Dosen"><input class="s-jml" type="number" placeholder="0"><input class="s-nama" placeholder="nama..."><button type="button" class="dyn-del">✕</button>';
+  box.appendChild(row);
+  if (peran) row.querySelector(".s-peran").value = peran;
+  if (jml) row.querySelector(".s-jml").value = jml;
+  if (nama) row.querySelector(".s-nama").value = nama;
+  row.querySelector(".dyn-del").addEventListener("click", () => row.remove());
+}
+function collectPeserta() {
+  return [...document.querySelectorAll("#rows-peserta .dyn-row")].map((r) => ({
+    kat: r.querySelector(".p-kat").value.trim(),
+    ter: r.querySelector(".p-ter").value, had: r.querySelector(".p-had").value,
+  })).filter((x) => x.kat);
+}
+function collectSDM() {
+  return [...document.querySelectorAll("#rows-sdm .dyn-row")].map((r) => ({
+    peran: r.querySelector(".s-peran").value.trim(),
+    jml: r.querySelector(".s-jml").value, nama: r.querySelector(".s-nama").value.trim(),
+  })).filter((x) => x.peran);
+}
+
 async function simpan() {
   const msg = $("save-msg"); msg.textContent = ""; msg.className = "save-msg";
   if (!SESSION) { msg.textContent = "Anda belum login."; msg.classList.add("err"); return; }
   const program = $("in-program").value;
   if (!canAccessProgram(program)) { msg.textContent = "Anda tak berhak mengisi program ini."; msg.classList.add("err"); return; }
 
-  // record dengan nama kolom yang rapi (jadi header di sheet DataMasuk)
   const record = {
+    "Mode": INPUT_MODE === "milestone" ? "Upcoming Milestone" : "On-Going",
     "Tanggal Kegiatan": $("f-tanggal").value,
     "Nama Kegiatan": $("f-kegiatan").value.trim(),
-    "Anggaran": $("f-anggaran").value,
-    "Realisasi": $("f-realisasi").value,
-    "Target Peserta": $("f-target").value,
-    "Actual Peserta": $("f-actual").value,
-    "Nilai Capaian": $("f-nilai").value,
-    "Kehadiran": $("f-hadir").value,
-    "Feedback": $("f-feedback").value,
-    "Keberjalanan Kegiatan": $("f-keberjalanan").value,
-    "Level Isu": $("f-level").value,
-    "Keterangan Isu": $("f-ketisu").value.trim(),
-    "Jenis/Milestone": $("f-jenis").value.trim(),
+    "Fase Kegiatan": $("f-fase").value.trim(),
+    "Lokasi / Alamat": $("f-lokasi").value.trim(),
   };
-  // gabung kolom tambahan (dinamis)
+
+  if (INPUT_MODE === "ongoing") {
+    collectPeserta().forEach((p) => {
+      record["Peserta " + p.kat + " (terdaftar)"] = p.ter;
+      record["Peserta " + p.kat + " (hadir)"] = p.had;
+    });
+    collectSDM().forEach((s) => {
+      record["SDM " + s.peran + " (jumlah)"] = s.jml;
+      record["SDM " + s.peran + " (nama)"] = s.nama;
+    });
+    record["Level Isu"] = $("f-level").value;
+    record["Keterangan Isu"] = $("f-ketisu").value.trim();
+    record["Issue dengan pihak"] = $("f-pihak").value.trim();
+    record["Penanganan"] = $("f-penanganan").value.trim();
+    record["Nilai Capaian (%)"] = $("f-nilai").value;
+    record["Kehadiran (%)"] = $("f-hadir").value;
+    record["Feedback (%)"] = $("f-feedback").value;
+    record["Keberjalanan Kegiatan"] = $("f-keberjalanan").value;
+  }
+
   const extra = getExtraCols();
   Object.keys(extra).forEach((k) => { record[k] = extra[k]; });
 
-  if (!record["Nama Kegiatan"] && !record["Jenis/Milestone"]) {
-    msg.textContent = "Isi minimal Nama Kegiatan atau Jenis/Milestone."; msg.classList.add("err"); return;
-  }
+  if (!record["Nama Kegiatan"]) { msg.textContent = "Nama kegiatan wajib diisi."; msg.classList.add("err"); return; }
 
-  if (!API_URL) {   // mode demo
-    msg.textContent = "Tersimpan (mode contoh — belum ke Sheets)."; msg.classList.add("ok"); return;
-  }
+  if (!API_URL) { msg.textContent = "Tersimpan (mode contoh — belum ke Sheets)."; msg.classList.add("ok"); return; }
 
   msg.textContent = "Menyimpan...";
   try {
@@ -393,8 +439,9 @@ async function simpan() {
     const out = await res.json();
     if (out.ok) {
       msg.textContent = "✅ Tersimpan ke Sheets (DataMasuk)."; msg.classList.add("ok");
-      // kosongkan kolom tambahan, muat ulang tabel
       if ($("extra-cols")) $("extra-cols").innerHTML = "";
+      if ($("rows-peserta")) $("rows-peserta").innerHTML = "";
+      if ($("rows-sdm")) $("rows-sdm").innerHTML = "";
       await loadFlex(); renderFlexTable(program);
     } else {
       msg.textContent = "❌ " + (out.error || "Gagal menyimpan."); msg.classList.add("err");
@@ -818,8 +865,17 @@ async function init() {
     const ff = $("form-fields");
     ff.hidden = !ff.hidden;
     $("btn-show-form").textContent = ff.hidden ? "➕ Input Data Baru" : "✖ Tutup Form";
-    if (!ff.hidden) ff.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (!ff.hidden) {
+      setInputMode("ongoing");
+      if ($("rows-peserta") && !$("rows-peserta").children.length) { addPesertaRow("SMA"); addPesertaRow("Universitas"); }
+      if ($("rows-sdm") && !$("rows-sdm").children.length) { addSDMRow("Dosen"); }
+      ff.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
   });
+  if ($("mode-ongoing")) $("mode-ongoing").addEventListener("click", () => setInputMode("ongoing"));
+  if ($("mode-milestone")) $("mode-milestone").addEventListener("click", () => setInputMode("milestone"));
+  if ($("add-peserta")) $("add-peserta").addEventListener("click", () => addPesertaRow());
+  if ($("add-sdm")) $("add-sdm").addEventListener("click", () => addSDMRow());
   $("btn-acc").addEventListener("click", checkAccessPassword);
   $("acc-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") checkAccessPassword(); });
   $("btn-logout").addEventListener("click", logout);
