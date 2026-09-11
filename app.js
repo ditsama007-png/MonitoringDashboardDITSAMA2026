@@ -354,40 +354,48 @@ async function simpan() {
   const msg = $("save-msg"); msg.textContent = ""; msg.className = "save-msg";
   if (!SESSION) { msg.textContent = "Anda belum login."; msg.classList.add("err"); return; }
   const program = $("in-program").value;
-  if (!canAccessProgram(program)) { msg.textContent = "Jabatan Anda tak berhak mengisi program ini."; msg.classList.add("err"); return; }
+  if (!canAccessProgram(program)) { msg.textContent = "Anda tak berhak mengisi program ini."; msg.classList.add("err"); return; }
 
-  const payload = {
-    action: "write",
-    token: SESSION.token,
-    program: program,
-    row: {
-      tanggal: $("f-tanggal").value,
-      kegiatan: $("f-kegiatan").value.trim(),
-      anggaran: $("f-anggaran").value, realisasi: $("f-realisasi").value,
-      target: $("f-target").value, actual: $("f-actual").value,
-      nilai: $("f-nilai").value, hadir: $("f-hadir").value, feedback: $("f-feedback").value,
-      keberjalanan: $("f-keberjalanan").value, level: $("f-level").value,
-      ketisu: $("f-ketisu").value.trim(), jenis: $("f-jenis").value.trim(),
-    },
+  // record dengan nama kolom yang rapi (jadi header di sheet DataMasuk)
+  const record = {
+    "Tanggal Kegiatan": $("f-tanggal").value,
+    "Nama Kegiatan": $("f-kegiatan").value.trim(),
+    "Anggaran": $("f-anggaran").value,
+    "Realisasi": $("f-realisasi").value,
+    "Target Peserta": $("f-target").value,
+    "Actual Peserta": $("f-actual").value,
+    "Nilai Capaian": $("f-nilai").value,
+    "Kehadiran": $("f-hadir").value,
+    "Feedback": $("f-feedback").value,
+    "Keberjalanan Kegiatan": $("f-keberjalanan").value,
+    "Level Isu": $("f-level").value,
+    "Keterangan Isu": $("f-ketisu").value.trim(),
+    "Jenis/Milestone": $("f-jenis").value.trim(),
   };
-  if (!payload.row.kegiatan) { msg.textContent = "Nama kegiatan wajib diisi."; msg.classList.add("err"); return; }
+  // gabung kolom tambahan (dinamis)
+  const extra = getExtraCols();
+  Object.keys(extra).forEach((k) => { record[k] = extra[k]; });
 
-  if (!API_URL) {   // mode demo: simpan sementara di memori
-    (DATA[program] = DATA[program] || []).push({ ...payload.row });
-    msg.textContent = "Tersimpan (mode contoh — belum ke Sheets)."; msg.classList.add("ok");
-    renderInput(program); rebuildFilters(); return;
+  if (!record["Nama Kegiatan"] && !record["Jenis/Milestone"]) {
+    msg.textContent = "Isi minimal Nama Kegiatan atau Jenis/Milestone."; msg.classList.add("err"); return;
+  }
+
+  if (!API_URL) {   // mode demo
+    msg.textContent = "Tersimpan (mode contoh — belum ke Sheets)."; msg.classList.add("ok"); return;
   }
 
   msg.textContent = "Menyimpan...";
   try {
     const res = await fetch(API_URL, {
       method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ action: "write_flex", token: SESSION.token, program: program, record: record }),
     });
     const out = await res.json();
     if (out.ok) {
-      msg.textContent = "✅ Tersimpan ke Sheets."; msg.classList.add("ok");
-      await loadData(); renderInput(program); rebuildFilters();
+      msg.textContent = "✅ Tersimpan ke Sheets (DataMasuk)."; msg.classList.add("ok");
+      // kosongkan kolom tambahan, muat ulang tabel
+      if ($("extra-cols")) $("extra-cols").innerHTML = "";
+      await loadFlex(); renderFlexTable(program);
     } else {
       msg.textContent = "❌ " + (out.error || "Gagal menyimpan."); msg.classList.add("err");
     }
@@ -550,18 +558,67 @@ function populateInputPrograms() {
 }
 
 // tampilkan form + pivot + tabel untuk program terpilih di Input Data
+let FLEX_CACHE = null;   // {header, rows} dari DataMasuk
+
 function renderInput(key) {
   if (!key) { return; }
   if ($("form-fields")) $("form-fields").hidden = true;
   if ($("btn-show-form")) $("btn-show-form").textContent = "➕ Input Data Baru";
-  renderInputPivot(key);
-  renderTableFor(key, "data-table");
+  renderFlexTable(key);
 }
 
-// pivot 1 baris untuk program terpilih
-function renderInputPivot(key) {
-  const rows = (DATA[key] || []).map((r) => ({ ...r, _prog: key }));
-  renderPivotInto("input-pivot", rows, [key]);
+async function loadFlex() {
+  if (!API_URL) { FLEX_CACHE = FLEX_CACHE || { header: [], rows: [] }; return; }
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "read_flex" }),
+    });
+    const out = await res.json();
+    if (out.ok) FLEX_CACHE = { header: out.header || [], rows: out.rows || [] };
+  } catch (e) { console.error("read_flex gagal:", e); }
+}
+
+function renderFlexTable(key) {
+  const label = labelOf(key);
+  const thead = document.querySelector("#flex-table thead");
+  const tbody = document.querySelector("#flex-table tbody");
+  if (!thead || !tbody) return;
+  const flex = FLEX_CACHE || { header: [], rows: [] };
+  // hanya tampilkan kolom yang ada isinya + selalu tampilkan header dasar
+  const header = flex.header.length ? flex.header : ["Waktu Input", "Program", "PIC"];
+  const rows = flex.rows.filter((r) => String(r["Program"] || "") === label);
+  thead.innerHTML = "<tr>" + header.map((h) => `<th>${h}</th>`).join("") + "</tr>";
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="${header.length}" class="empty">Belum ada data untuk ${label}.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map((r) => "<tr>" +
+    header.map((h) => `<td>${r[h] !== undefined && r[h] !== null ? r[h] : ""}</td>`).join("") +
+    "</tr>").join("");
+}
+
+// ---- Kolom Tambahan (dinamis) ----
+function addExtraCol(name, val) {
+  const box = $("extra-cols"); if (!box) return;
+  const row = document.createElement("div");
+  row.className = "extra-row";
+  row.innerHTML = '<input class="xcol-name" placeholder="Nama kolom (mis. Sponsor)" />' +
+                  '<input class="xcol-val" placeholder="Isi" />' +
+                  '<button type="button" class="xcol-del" title="Hapus">✕</button>';
+  box.appendChild(row);
+  if (name) row.querySelector(".xcol-name").value = name;
+  if (val) row.querySelector(".xcol-val").value = val;
+  row.querySelector(".xcol-del").addEventListener("click", () => row.remove());
+}
+function getExtraCols() {
+  const out = {};
+  document.querySelectorAll("#extra-cols .extra-row").forEach((r) => {
+    const n = r.querySelector(".xcol-name").value.trim();
+    const v = r.querySelector(".xcol-val").value.trim();
+    if (n) out[n] = v;
+  });
+  return out;
 }
 
 // KPI mini-dashboard khusus satu program
@@ -785,6 +842,8 @@ async function init() {
   $("btn-refresh").addEventListener("click", async () => { await loadData(); rebuildFilters(); renderTable(); render(); });
   if ($("cal-prev")) $("cal-prev").addEventListener("click", () => calShift(-1));
   if ($("cal-next")) $("cal-next").addEventListener("click", () => calShift(1));
+  if ($("btn-add-col")) $("btn-add-col").addEventListener("click", () => addExtraCol());
+  loadFlex();
   ["flt-program", "flt-bulan", "flt-kegiatan", "flt-level"].forEach((id) =>
     $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
 }
