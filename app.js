@@ -368,15 +368,69 @@ function addPesertaRow(kat, ter, had) {
   if (had) row.querySelector(".p-had").value = had;
   row.querySelector(".dyn-del").addEventListener("click", () => row.remove());
 }
-function addSDMRow(peran, jml, nama) {
+function addSDMRow(peran, jml) {
   const box = $("rows-sdm"); if (!box) return;
-  const row = document.createElement("div"); row.className = "dyn-row sdm";
-  row.innerHTML = '<input class="s-peran" placeholder="mis. Dosen"><input class="s-jml" type="number" placeholder="0"><input class="s-nama" placeholder="nama..."><button type="button" class="dyn-del">✕</button>';
+  const row = document.createElement("div"); row.className = "sdm-block";
+  row.innerHTML =
+    '<div class="grid-2"><label>Peran<input class="s-peran" placeholder="mis. Dosen"></label>' +
+    '<label>Jumlah<input class="s-jml" type="number" placeholder="0"></label></div>' +
+    '<div class="sub" style="margin:2px 0 4px;">Daftar nama + unggah SK (file → Google Drive)</div>' +
+    '<div class="sdm-names"></div>' +
+    '<button type="button" class="btn-ghost s-addname">➕ Tambah nama</button> ' +
+    '<button type="button" class="btn-ghost s-delrole" style="color:#DC2626;">✕ Hapus peran</button>';
   box.appendChild(row);
   if (peran) row.querySelector(".s-peran").value = peran;
   if (jml) row.querySelector(".s-jml").value = jml;
-  if (nama) row.querySelector(".s-nama").value = nama;
-  row.querySelector(".dyn-del").addEventListener("click", () => row.remove());
+  const names = row.querySelector(".sdm-names");
+  addSDMName(names);   // satu nama awal
+  row.querySelector(".s-addname").addEventListener("click", () => addSDMName(names));
+  row.querySelector(".s-delrole").addEventListener("click", () => row.remove());
+}
+function addSDMName(container, nama, link) {
+  const nr = document.createElement("div"); nr.className = "sdm-name-row";
+  nr.innerHTML =
+    '<input class="s-nama" placeholder="nama orang">' +
+    '<button type="button" class="btn-ghost s-upload"><i>📎</i> Unggah SK</button>' +
+    '<span class="s-status"></span>' +
+    '<input type="file" class="s-file" accept="application/pdf,image/*" hidden>' +
+    '<button type="button" class="s-namedel" title="Hapus nama">✕</button>';
+  container.appendChild(nr);
+  if (nama) nr.querySelector(".s-nama").value = nama;
+  const statusEl = nr.querySelector(".s-status");
+  if (link) { statusEl.dataset.link = link; statusEl.innerHTML = '<a href="' + link + '" target="_blank">SK ✓</a>'; }
+  const fileInput = nr.querySelector(".s-file");
+  nr.querySelector(".s-upload").addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => uploadSK(nr));
+  nr.querySelector(".s-namedel").addEventListener("click", () => nr.remove());
+}
+async function uploadSK(nr) {
+  const file = nr.querySelector(".s-file").files[0];
+  const statusEl = nr.querySelector(".s-status");
+  if (!file) return;
+  // format nama file: Jabatan_Nama
+  const block = nr.closest(".sdm-block");
+  const peran = (block.querySelector(".s-peran").value.trim() || "SDM").replace(/\s+/g, "");
+  const nama = (nr.querySelector(".s-nama").value.trim() || "Tanpa Nama").replace(/\s+/g, "");
+  const ext = (file.name.split(".").pop() || "pdf");
+  const fname = peran + "_" + nama + "." + ext;
+  if (!API_URL) { statusEl.textContent = "(demo) " + fname; return; }
+  statusEl.textContent = "Mengunggah...";
+  try {
+    const b64 = await fileToBase64(file);
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "upload_sk", token: SESSION.token, name: fname, mime: file.type, data: b64 }) });
+    const out = await res.json();
+    if (out.ok) { statusEl.dataset.link = out.url; statusEl.innerHTML = '<a href="' + out.url + '" target="_blank">✓ ' + out.name + '</a>'; }
+    else statusEl.textContent = "❌ " + (out.error || "gagal");
+  } catch (e) { statusEl.textContent = "❌ gagal unggah"; }
+}
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
 }
 function collectPeserta() {
   return [...document.querySelectorAll("#rows-peserta .dyn-row")].map((r) => ({
@@ -385,9 +439,13 @@ function collectPeserta() {
   })).filter((x) => x.kat);
 }
 function collectSDM() {
-  return [...document.querySelectorAll("#rows-sdm .dyn-row")].map((r) => ({
-    peran: r.querySelector(".s-peran").value.trim(),
-    jml: r.querySelector(".s-jml").value, nama: r.querySelector(".s-nama").value.trim(),
+  return [...document.querySelectorAll("#rows-sdm .sdm-block")].map((b) => ({
+    peran: b.querySelector(".s-peran").value.trim(),
+    jml: b.querySelector(".s-jml").value,
+    names: [...b.querySelectorAll(".sdm-name-row")].map((nr) => ({
+      nama: nr.querySelector(".s-nama").value.trim(),
+      link: nr.querySelector(".s-status").dataset.link || "",
+    })).filter((n) => n.nama),
   })).filter((x) => x.peran);
 }
 function addIssueRow(nama, level, pihak, solve) {
@@ -447,7 +505,10 @@ async function simpan() {
     });
     collectSDM().forEach((s) => {
       record["SDM " + s.peran + " (jumlah)"] = s.jml;
-      record["SDM " + s.peran + " (nama)"] = s.nama;
+      s.names.forEach((n, i) => {
+        record["SDM " + s.peran + " - Nama " + (i + 1)] = n.nama;
+        if (n.link) record["SK " + s.peran + " (" + n.nama + ")"] = n.link;
+      });
     });
     // Issue paket (hanya yang diisi); kalau tak ada issue -> tak ada kolom issue
     collectIssues().forEach((it, i) => {
@@ -716,7 +777,7 @@ function renderInput(key) {
 }
 
 async function loadFlex() {
-  if (!API_URL) { FLEX_CACHE = FLEX_CACHE || { header: [], rows: [] }; return; }
+  if (!API_URL) { FLEX_CACHE = FLEX_CACHE || { header: [], rows: [] }; buildColHistory(); return; }
   try {
     const res = await fetch(API_URL, {
       method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -725,6 +786,15 @@ async function loadFlex() {
     const out = await res.json();
     if (out.ok) FLEX_CACHE = { header: out.header || [], rows: out.rows || [] };
   } catch (e) { console.error("read_flex gagal:", e); }
+  buildColHistory();
+}
+
+// riwayat semua nama kolom yang pernah ada (dari semua program) -> datalist
+function buildColHistory() {
+  const dl = $("col-history"); if (!dl) return;
+  const sys = { "ID": 1, "Waktu Input": 1, "Program": 1, "PIC": 1, "Mode": 1 };
+  const cols = ((FLEX_CACHE && FLEX_CACHE.header) || []).filter((h) => h && !sys[h]);
+  dl.innerHTML = [...new Set(cols)].map((c) => `<option value="${String(c).replace(/"/g, "&quot;")}">`).join("");
 }
 
 function renderFlexTable(key) {
@@ -735,7 +805,11 @@ function renderFlexTable(key) {
   if (!thead || !tbody) return;
   const flex = FLEX_CACHE || { header: [], rows: [] };
   const header = (flex.header.length ? flex.header : ["ID", "Waktu Input", "Program", "PIC"]);
-  const rows = flex.rows.filter((r) => String(r["Program"] || "") === label);
+  // Di Input Data: hanya data milik PIC yang login (dashboard portfolio tetap semua)
+  const myName = SESSION ? String(SESSION.nama).toLowerCase() : "";
+  const rows = flex.rows.filter((r) =>
+    String(r["Program"] || "") === label &&
+    String(r["PIC"] || "").toLowerCase() === myName);
   thead.innerHTML = "<tr>" + header.map((h) => `<th>${h}</th>`).join("") + "<th>Aksi</th></tr>";
   if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="${header.length + 1}" class="empty">Belum ada data untuk ${label}.</td></tr>`;
@@ -830,7 +904,7 @@ function addExtraCol(name, val) {
   const box = $("extra-cols"); if (!box) return;
   const row = document.createElement("div");
   row.className = "extra-row";
-  row.innerHTML = '<input class="xcol-name" placeholder="Nama kolom (mis. Sponsor)" />' +
+  row.innerHTML = '<input class="xcol-name" list="col-history" placeholder="Pilih riwayat / ketik nama baru" />' +
                   '<input class="xcol-val" placeholder="Isi" />' +
                   '<button type="button" class="xcol-del" title="Hapus">✕</button>';
   box.appendChild(row);
@@ -1086,6 +1160,10 @@ async function init() {
   if ($("cal-prev")) $("cal-prev").addEventListener("click", () => calShift(-1));
   if ($("cal-next")) $("cal-next").addEventListener("click", () => calShift(1));
   if ($("btn-add-col")) $("btn-add-col").addEventListener("click", () => addExtraCol());
+  if ($("btn-refresh-flex")) $("btn-refresh-flex").addEventListener("click", async () => {
+    const b = $("btn-refresh-flex"); const t = b.textContent; b.textContent = "⏳ Memuat...";
+    await loadFlex(); renderFlexTable($("in-program").value); b.textContent = t;
+  });
   loadFlex();
   ["flt-program", "flt-bulan", "flt-kegiatan", "flt-level"].forEach((id) =>
     $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
