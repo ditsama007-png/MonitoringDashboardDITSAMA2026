@@ -569,36 +569,80 @@ function clearForm() {
 }
 
 // tampilkan milestone aktif (di atas tabel) + tombol Isi
-function renderMilestoneBanner(key) {
-  const host = $("milestone-banner"); if (!host) return;
+// milestone upcoming per program (belum lewat): dipakai untuk badge & daftar
+function upcomingMilestones(key) {
   const label = labelOf(key);
   const flex = FLEX_CACHE || { rows: [] };
-  const items = flex.rows.filter((r) => {
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  return flex.rows.filter((r) => {
     const p = String(r["Program"] || "");
-    return (p === key || p === label) &&
-      String(r["Mode"] || "") === "Upcoming Milestone" &&
-      milestoneActive(r);
+    if (!(p === key || p === label)) return false;
+    if (String(r["Mode"] || "") !== "Upcoming Milestone") return false;
+    const t = r["Tanggal Kegiatan"];
+    if (!t) return true;                       // belum ada tanggal -> tetap upcoming
+    const d = new Date(t); if (isNaN(d)) return true;
+    return d >= now;                           // hanya yang belum lewat
   });
-  if (!items.length) { host.innerHTML = ""; host.style.display = "none"; return; }
-  host.style.display = "";
-  host.innerHTML = '<div class="ms-banner-title">📌 Upcoming Milestone aktif — siap diisi</div>' +
+}
+
+// status otomatis dari Mode + Tanggal
+function statusOf(r) {
+  if (String(r["Mode"] || "") === "Upcoming Milestone") return "Upcoming";
+  const t = r["Tanggal Kegiatan"];
+  if (t) { const d = new Date(t); if (!isNaN(d)) { const now = new Date(); now.setHours(0, 0, 0, 0); if (d < now) return "Selesai"; } }
+  return "On-Going";
+}
+
+// kartu Upcoming Milestone di halaman program
+function renderProgramMilestones(key) {
+  const host = $("prog-milestones"); if (!host) return;
+  const items = upcomingMilestones(key);
+  if (!items.length) { host.innerHTML = ""; return; }
+  host.innerHTML =
+    '<div class="card">' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
+      '<h3 style="margin:0;">Upcoming Milestone</h3>' +
+      '<span class="notif-badge">' + items.length + '</span></div>' +
     items.map((r) => {
       const nm = r["Nama Kegiatan"] || "(tanpa nama)";
       const tg = r["Tanggal Kegiatan"] || "(belum ada tanggal)";
       const id = r["ID"] || "";
-      return `<div class="ms-banner-row"><div><b>${nm}</b> · ${tg}</div>` +
-        `<button class="btn-primary ms-fill" data-id="${id}">✍ Isi data</button></div>`;
-    }).join("");
-  host.querySelectorAll(".ms-fill").forEach((btn) => {
+      return '<div class="ms-row"><div><b>' + nm + '</b>' +
+        '<div class="sub">📅 ' + tg + '</div></div>' +
+        '<div style="white-space:nowrap;">' +
+        '<button class="mini-btn ok ms-fill" data-id="' + id + '">✍ Isi data</button> ' +
+        '<button class="mini-btn ms-edit" data-id="' + id + '">✎ Edit</button></div></div>';
+    }).join("") + '</div>';
+  host.querySelectorAll(".ms-fill, .ms-edit").forEach((btn) => {
     btn.addEventListener("click", () => {
       const row = items.find((x) => String(x["ID"]) === btn.dataset.id);
-      if (row) fillMilestone(row);
+      if (row) { gotoInputForMilestone(key); fillMilestone(row); }
     });
   });
 }
 
+// badge notif jumlah milestone di tiap menu program
+function renderNavBadges() {
+  document.querySelectorAll('.nav-item[data-view]').forEach((btn) => {
+    const v = btn.dataset.view;
+    if (v === "dashboard" || v === "input") return;
+    let badge = btn.querySelector(".nav-badge");
+    const n = upcomingMilestones(v).length;
+    if (n > 0) {
+      if (!badge) { badge = document.createElement("span"); badge.className = "nav-badge"; btn.appendChild(badge); }
+      badge.textContent = n;
+    } else if (badge) { badge.remove(); }
+  });
+}
+
+// pindah ke Input Data untuk mengisi milestone program tertentu
+function gotoInputForMilestone(key) {
+  const navInput = document.querySelector('.nav-item[data-view="input"]');
+  setActiveNav(navInput); showView("input");
+  if ($("in-program")) { $("in-program").value = key; renderInput(key); }
+}
+
 function fillMilestone(row) {
-  // buka form + prefill identitas dari milestone, tandai sebagai edit baris itu
   const ff = $("form-fields"); if (ff) ff.hidden = false;
   if ($("btn-show-form")) $("btn-show-form").textContent = "✖ Tutup Form";
   clearForm();
@@ -607,7 +651,7 @@ function fillMilestone(row) {
   if ($("f-tanggal")) $("f-tanggal").value = toDateInput(row["Tanggal Kegiatan"]);
   if ($("f-fase")) $("f-fase").value = row["Fase Kegiatan"] || "";
   if ($("f-lokasi")) $("f-lokasi").value = row["Lokasi / Alamat"] || "";
-  setInputMode("ongoing");   // saat diisi jadi data on-going
+  setInputMode("ongoing");
   ff.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 function toDateInput(v) {
@@ -755,6 +799,7 @@ function showView(view) {
     const p = programByKey(view);
     $("prog-title").textContent = "Dashboard Program · " + (p ? p.label : view);
     renderProgramDash(view);
+    renderProgramMilestones(view);
     renderTableFor(view, "prog-table");
   }
 }
@@ -789,6 +834,7 @@ async function loadFlex() {
     if (out.ok) FLEX_CACHE = { header: out.header || [], rows: out.rows || [] };
   } catch (e) { console.error("read_flex gagal:", e); }
   buildColHistory();
+  renderNavBadges();
 }
 
 // riwayat semua nama kolom yang pernah ada (dari semua program) -> datalist
@@ -800,7 +846,6 @@ function buildColHistory() {
 }
 
 function renderFlexTable(key) {
-  renderMilestoneBanner(key);
   const label = labelOf(key);
   const thead = document.querySelector("#flex-table thead");
   const tbody = document.querySelector("#flex-table tbody");
@@ -812,15 +857,19 @@ function renderFlexTable(key) {
     const p = String(r["Program"] || "");
     return p === key || p === label;
   });
-  thead.innerHTML = "<tr>" + header.map((h) => `<th>${h}</th>`).join("") + "<th>Aksi</th></tr>";
+  thead.innerHTML = "<tr><th>Status</th>" + header.map((h) => `<th>${h}</th>`).join("") + "<th>Aksi</th></tr>";
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="${header.length + 1}" class="empty">Belum ada data untuk ${label}.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${header.length + 2}" class="empty">Belum ada data untuk ${label}.</td></tr>`;
     return;
   }
   tbody.innerHTML = "";
   rows.forEach((r) => {
     const tr = document.createElement("tr");
     tr.dataset.id = r["ID"] || "";
+    const st = statusOf(r);
+    const stTd = document.createElement("td");
+    stTd.innerHTML = '<span class="status-badge st-' + st.toLowerCase().replace(/[^a-z]/g, "") + '">' + st + '</span>';
+    tr.appendChild(stTd);
     header.forEach((h) => {
       const td = document.createElement("td");
       td.dataset.col = h;
