@@ -242,3 +242,11 @@ tbody tr:nth-child(even){background:#F8FAFD}
 .dyn-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 30px;gap:6px;margin-bottom:6px}
 .dyn-row.sdm{grid-template-columns:1.2fr .8fr 1.4fr 30px}
 .dyn-row .dyn-del{background:#FEE2E2;color:#DC2626;border:none;border-radius:8px;cursor:pointer;font-weight:700}
+
+/* ===== Tombol aksi di tabel data ===== */
+.mini-btn{background:#EEF2F9;border:1px solid #E5EAF2;border-radius:7px;padding:.2rem .5rem;
+  font-size:.72rem;font-weight:600;color:#1B3A6B;cursor:pointer}
+.mini-btn.del{background:#FEE2E2;color:#DC2626;border-color:#FECACA}
+.mini-btn.ok{background:#2F6FB0;color:#fff;border-color:#2F6FB0}
+.mini-btn.fill{background:#DCFCE7;color:#16A34A;border-color:#bbf0cf}
+.mini-btn.fill.off{background:#EEF2F9;color:#9aa3b2;border-color:#E5EAF2}
