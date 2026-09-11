@@ -258,3 +258,13 @@ tbody tr:nth-child(even){background:#F8FAFD}
   background:#fff;border:1px solid #F0D9A8;border-radius:9px;padding:.5rem .7rem;margin-bottom:.4rem;font-size:.85rem}
 .ms-banner-row .btn-primary.ms-fill{padding:.35rem .8rem;font-size:.8rem}
 .issue-row{border:1px dashed #C7D9F0;border-radius:9px;padding:.5rem .6rem;margin-bottom:.5rem}
+
+/* ===== SDM: blok peran + daftar nama + upload SK ===== */
+.sdm-block{border:1px solid #E5EAF2;border-radius:9px;padding:.6rem .7rem;margin-bottom:.6rem}
+.sdm-names{margin:.2rem 0 .5rem}
+.sdm-name-row{display:grid;grid-template-columns:1fr auto auto 28px;gap:6px;align-items:center;margin-bottom:5px}
+.sdm-name-row .s-upload{padding:.3rem .55rem;font-size:.75rem;white-space:nowrap;margin:0}
+.sdm-name-row .s-status{font-size:.75rem;color:#16A34A;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sdm-name-row .s-status a{color:#2F6FB0}
+.sdm-name-row .s-namedel{background:#FEE2E2;color:#DC2626;border:none;border-radius:7px;cursor:pointer;font-weight:700}
+.sdm-block .s-addname,.sdm-block .s-delrole{padding:.3rem .6rem;font-size:.76rem;margin-top:2px}
