@@ -389,6 +389,32 @@ function collectSDM() {
     jml: r.querySelector(".s-jml").value, nama: r.querySelector(".s-nama").value.trim(),
   })).filter((x) => x.peran);
 }
+function addIssueRow(nama, level, ket, solve) {
+  const box = $("rows-issue"); if (!box) return;
+  const row = document.createElement("div"); row.className = "issue-row";
+  const opts = (typeof OPSI_LEVEL_ISU !== "undefined" ? OPSI_LEVEL_ISU : ["High", "Medium", "Low", "Tidak Ada"])
+    .map((o) => `<option>${o}</option>`).join("");
+  row.innerHTML =
+    '<div class="grid-2"><label>Nama Isu<input class="i-nama" placeholder="mis. Jadwal bentrok"></label>' +
+    '<label>Level<select class="i-level">' + opts + '</select></label></div>' +
+    '<div class="grid-2"><label>Keterangan<input class="i-ket" placeholder="penjelasan"></label>' +
+    '<label>Problem Solving<input class="i-solve" placeholder="penanganan"></label></div>' +
+    '<button type="button" class="btn-ghost i-del" style="margin-bottom:8px;">✕ Hapus issue</button>';
+  box.appendChild(row);
+  if (nama) row.querySelector(".i-nama").value = nama;
+  if (level) row.querySelector(".i-level").value = level;
+  if (ket) row.querySelector(".i-ket").value = ket;
+  if (solve) row.querySelector(".i-solve").value = solve;
+  row.querySelector(".i-del").addEventListener("click", () => row.remove());
+}
+function collectIssues() {
+  return [...document.querySelectorAll("#rows-issue .issue-row")].map((r) => ({
+    nama: r.querySelector(".i-nama").value.trim(),
+    level: r.querySelector(".i-level").value,
+    ket: r.querySelector(".i-ket").value.trim(),
+    solve: r.querySelector(".i-solve").value.trim(),
+  })).filter((x) => x.nama || x.ket || x.solve);
+}
 
 async function simpan() {
   const msg = $("save-msg"); msg.textContent = ""; msg.className = "save-msg";
@@ -405,22 +431,29 @@ async function simpan() {
   };
 
   if (INPUT_MODE === "ongoing") {
+    let totTer = 0, totHad = 0;
     collectPeserta().forEach((p) => {
       record["Peserta " + p.kat + " (terdaftar)"] = p.ter;
       record["Peserta " + p.kat + " (hadir)"] = p.had;
+      totTer += +p.ter || 0; totHad += +p.had || 0;
     });
     collectSDM().forEach((s) => {
       record["SDM " + s.peran + " (jumlah)"] = s.jml;
       record["SDM " + s.peran + " (nama)"] = s.nama;
     });
-    record["Level Isu"] = $("f-level").value;
-    record["Keterangan Isu"] = $("f-ketisu").value.trim();
-    record["Issue dengan pihak"] = $("f-pihak").value.trim();
-    record["Penanganan"] = $("f-penanganan").value.trim();
+    // Issue paket (hanya yang diisi); kalau tak ada issue -> tak ada kolom issue
+    collectIssues().forEach((it, i) => {
+      const n = i + 1;
+      record["Issue " + n + " Nama"] = it.nama;
+      record["Issue " + n + " Level"] = it.level;
+      record["Issue " + n + " Keterangan"] = it.ket;
+      record["Issue " + n + " Problem Solving"] = it.solve;
+    });
     record["Nilai Capaian (%)"] = $("f-nilai").value;
-    record["Kehadiran (%)"] = $("f-hadir").value;
     record["Feedback (%)"] = $("f-feedback").value;
     record["Keberjalanan Kegiatan"] = $("f-keberjalanan").value;
+    // Kehadiran otomatis = total hadir / total terdaftar * 100
+    if (totTer > 0) record["Kehadiran (%)"] = Math.round((totHad / totTer) * 100);
   }
 
   const extra = getExtraCols();
@@ -438,10 +471,8 @@ async function simpan() {
     });
     const out = await res.json();
     if (out.ok) {
-      msg.textContent = "✅ Tersimpan ke Sheets (DataMasuk)."; msg.classList.add("ok");
-      if ($("extra-cols")) $("extra-cols").innerHTML = "";
-      if ($("rows-peserta")) $("rows-peserta").innerHTML = "";
-      if ($("rows-sdm")) $("rows-sdm").innerHTML = "";
+      msg.textContent = "✅ Tersimpan. Isi lagi atau klik 'Tambahkan data lainnya'."; msg.classList.add("ok");
+      clearForm();
       await loadFlex(); renderFlexTable(program);
     } else {
       msg.textContent = "❌ " + (out.error || "Gagal menyimpan."); msg.classList.add("err");
@@ -449,6 +480,16 @@ async function simpan() {
   } catch (e) {
     msg.textContent = "❌ Gagal terhubung ke server."; msg.classList.add("err");
   }
+}
+
+// kosongkan form ke bentuk awal (untuk input baru)
+function clearForm() {
+  ["f-tanggal", "f-kegiatan", "f-fase", "f-lokasi", "f-nilai", "f-feedback"].forEach((id) => { if ($(id)) $(id).value = ""; });
+  if ($("f-keberjalanan")) $("f-keberjalanan").selectedIndex = 0;
+  ["rows-peserta", "rows-sdm", "rows-issue", "extra-cols"].forEach((id) => { if ($(id)) $(id).innerHTML = ""; });
+  // seed baris default peserta & SDM lagi
+  addPesertaRow("SMA"); addPesertaRow("Universitas"); addSDMRow("Dosen");
+  setInputMode("ongoing");
 }
 
 // ------------------------------------------------------------- filters ------
@@ -502,8 +543,7 @@ function rowsForFilter() {
 function initSelects() {
   // program form
   $("in-program").innerHTML = PROGRAMS.map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
-  $("f-keberjalanan").innerHTML = ["", ...OPSI_KEBERJALANAN].map((o) => `<option>${o}</option>`).join("");
-  $("f-level").innerHTML = OPSI_LEVEL_ISU.map((o) => `<option>${o}</option>`).join("");
+  if ($("f-keberjalanan")) $("f-keberjalanan").innerHTML = ["", ...OPSI_KEBERJALANAN].map((o) => `<option>${o}</option>`).join("");
   // checkbox program (untuk sign up)
   const box = $("a-programs");
   if (box) {
@@ -954,6 +994,13 @@ async function init() {
   if ($("mode-milestone")) $("mode-milestone").addEventListener("click", () => setInputMode("milestone"));
   if ($("add-peserta")) $("add-peserta").addEventListener("click", () => addPesertaRow());
   if ($("add-sdm")) $("add-sdm").addEventListener("click", () => addSDMRow());
+  if ($("add-issue")) $("add-issue").addEventListener("click", () => addIssueRow());
+  if ($("btn-add-more")) $("btn-add-more").addEventListener("click", () => {
+    clearForm();
+    const ff = $("form-fields"); if (ff) ff.hidden = false;
+    if ($("btn-show-form")) $("btn-show-form").textContent = "✖ Tutup Form";
+    $("f-kegiatan").focus();
+  });
   $("btn-acc").addEventListener("click", checkAccessPassword);
   $("acc-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") checkAccessPassword(); });
   $("btn-logout").addEventListener("click", logout);
