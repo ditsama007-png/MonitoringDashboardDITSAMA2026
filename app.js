@@ -632,17 +632,95 @@ function renderFlexTable(key) {
   const tbody = document.querySelector("#flex-table tbody");
   if (!thead || !tbody) return;
   const flex = FLEX_CACHE || { header: [], rows: [] };
-  // hanya tampilkan kolom yang ada isinya + selalu tampilkan header dasar
-  const header = flex.header.length ? flex.header : ["Waktu Input", "Program", "PIC"];
+  const header = (flex.header.length ? flex.header : ["ID", "Waktu Input", "Program", "PIC"]);
   const rows = flex.rows.filter((r) => String(r["Program"] || "") === label);
-  thead.innerHTML = "<tr>" + header.map((h) => `<th>${h}</th>`).join("") + "</tr>";
+  thead.innerHTML = "<tr>" + header.map((h) => `<th>${h}</th>`).join("") + "<th>Aksi</th></tr>";
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="${header.length}" class="empty">Belum ada data untuk ${label}.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${header.length + 1}" class="empty">Belum ada data untuk ${label}.</td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map((r) => "<tr>" +
-    header.map((h) => `<td>${r[h] !== undefined && r[h] !== null ? r[h] : ""}</td>`).join("") +
-    "</tr>").join("");
+  tbody.innerHTML = "";
+  rows.forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.dataset.id = r["ID"] || "";
+    header.forEach((h) => {
+      const td = document.createElement("td");
+      td.dataset.col = h;
+      td.textContent = (r[h] !== undefined && r[h] !== null) ? r[h] : "";
+      tr.appendChild(td);
+    });
+    const act = document.createElement("td"); act.className = "act-cell"; act.style.whiteSpace = "nowrap";
+    act.innerHTML =
+      '<button class="mini-btn edit">✎ Edit</button> ' +
+      '<button class="mini-btn del">🗑 Hapus</button>' +
+      (milestoneNeedsDate(r) ? ' <button class="mini-btn fill' + (milestoneActive(r) ? "" : " off") + '">📅 Isi tanggal</button>' : "");
+    tr.appendChild(act);
+    tbody.appendChild(tr);
+
+    act.querySelector(".del").addEventListener("click", () => hapusRow(r["ID"], key));
+    act.querySelector(".edit").addEventListener("click", () => editRow(tr, r, key));
+    const fb = act.querySelector(".fill");
+    if (fb) fb.addEventListener("click", () => {
+      if (!milestoneActive(r)) { alert("Tombol isi tanggal aktif H-2 sampai H+7 dari tanggal milestone."); return; }
+      const d = prompt("Isi tanggal pelaksanaan (YYYY-MM-DD):", r["Tanggal Kegiatan"] || "");
+      if (d) updateRow(r["ID"], { "Tanggal Kegiatan": d }, key);
+    });
+  });
+}
+
+function milestoneNeedsDate(r) { return String(r["Mode"] || "") === "Upcoming Milestone"; }
+function milestoneActive(r) {
+  const t = r["Tanggal Kegiatan"];
+  if (!t) return true;                       // belum ada tanggal -> boleh diisi
+  const d = new Date(t); if (isNaN(d)) return true;
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const from = new Date(d); from.setDate(from.getDate() - 2);
+  const to = new Date(d); to.setDate(to.getDate() + 7);
+  return now >= from && now <= to;           // aktif H-2 sampai H+7
+}
+
+async function hapusRow(id, key) {
+  if (!id || !confirm("Hapus baris ini? Tidak bisa dikembalikan.")) return;
+  if (!API_URL) { alert("Mode contoh — hapus hanya aktif setelah tersambung ke Sheets."); return; }
+  try {
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "delete_flex", token: SESSION.token, id: id }) });
+    const out = await res.json();
+    if (out.ok) { await loadFlex(); renderFlexTable(key); }
+    else alert("Gagal hapus: " + (out.error || ""));
+  } catch (e) { alert("Gagal terhubung ke server."); }
+}
+
+async function updateRow(id, record, key) {
+  if (!API_URL) { alert("Mode contoh — edit hanya aktif setelah tersambung ke Sheets."); return; }
+  try {
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "update_flex", token: SESSION.token, id: id, record: record }) });
+    const out = await res.json();
+    if (out.ok) { await loadFlex(); renderFlexTable(key); }
+    else alert("Gagal simpan: " + (out.error || ""));
+  } catch (e) { alert("Gagal terhubung ke server."); }
+}
+
+function editRow(tr, r, key) {
+  const skip = { "ID": 1, "Waktu Input": 1, "Program": 1, "PIC": 1 };
+  [...tr.querySelectorAll("td")].forEach((td) => {
+    const col = td.dataset.col;
+    if (!col || skip[col]) return;
+    const val = td.textContent;
+    td.innerHTML = `<input value="${String(val).replace(/"/g, "&quot;")}" style="width:100%;height:30px;">`;
+  });
+  const act = tr.querySelector(".act-cell");
+  act.innerHTML = '<button class="mini-btn ok">✔ OK</button> <button class="mini-btn cancel">Batal</button>';
+  act.querySelector(".cancel").addEventListener("click", () => renderFlexTable(key));
+  act.querySelector(".ok").addEventListener("click", () => {
+    const rec = {};
+    [...tr.querySelectorAll("td")].forEach((td) => {
+      const col = td.dataset.col; const inp = td.querySelector("input");
+      if (col && inp && !skip[col]) rec[col] = inp.value;
+    });
+    updateRow(r["ID"], rec, key);
+  });
 }
 
 // ---- Kolom Tambahan (dinamis) ----
