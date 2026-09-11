@@ -351,6 +351,7 @@ function renderTableFor(key, tableId) {
 
 // -------------------------------------------------------- simpan form -------
 let INPUT_MODE = "ongoing";
+let EDIT_ID = null;   // kalau sedang mengisi/edit baris milestone tertentu
 function setInputMode(m) {
   INPUT_MODE = m;
   if ($("mode-ongoing")) $("mode-ongoing").classList.toggle("active", m === "ongoing");
@@ -389,31 +390,38 @@ function collectSDM() {
     jml: r.querySelector(".s-jml").value, nama: r.querySelector(".s-nama").value.trim(),
   })).filter((x) => x.peran);
 }
-function addIssueRow(nama, level, ket, solve) {
+function addIssueRow(nama, level, pihak, solve) {
   const box = $("rows-issue"); if (!box) return;
   const row = document.createElement("div"); row.className = "issue-row";
-  const opts = (typeof OPSI_LEVEL_ISU !== "undefined" ? OPSI_LEVEL_ISU : ["High", "Medium", "Low", "Tidak Ada"])
+  const opts = (typeof OPSI_LEVEL_ISU !== "undefined" ? OPSI_LEVEL_ISU : ["Tidak Ada", "High", "Medium", "Low"])
     .map((o) => `<option>${o}</option>`).join("");
   row.innerHTML =
-    '<div class="grid-2"><label>Nama Isu<input class="i-nama" placeholder="mis. Jadwal bentrok"></label>' +
-    '<label>Level<select class="i-level">' + opts + '</select></label></div>' +
-    '<div class="grid-2"><label>Keterangan<input class="i-ket" placeholder="penjelasan"></label>' +
-    '<label>Problem Solving<input class="i-solve" placeholder="penanganan"></label></div>' +
+    '<div class="grid-2"><label>Tentukan Level Isu dulu<select class="i-level">' + opts + '</select></label><div></div></div>' +
+    '<div class="i-detail" hidden>' +
+      '<div class="grid-2"><label>Nama Isu<input class="i-nama" placeholder="mis. Jadwal bentrok"></label>' +
+      '<label>Issue dengan pihak siapa (penyelenggara)?<input class="i-pihak" placeholder="mis. sekolah / mitra"></label></div>' +
+      '<div class="grid-2"><label>Problem Solving<input class="i-solve" placeholder="penanganan yang dilakukan"></label><div></div></div>' +
+    '</div>' +
     '<button type="button" class="btn-ghost i-del" style="margin-bottom:8px;">✕ Hapus issue</button>';
   box.appendChild(row);
+  const lvl = row.querySelector(".i-level");
+  const detail = row.querySelector(".i-detail");
+  const sync = () => { detail.hidden = (lvl.value === "Tidak Ada" || lvl.value === ""); };
+  lvl.addEventListener("change", sync);
+  if (level) lvl.value = level;
+  sync();
   if (nama) row.querySelector(".i-nama").value = nama;
-  if (level) row.querySelector(".i-level").value = level;
-  if (ket) row.querySelector(".i-ket").value = ket;
+  if (pihak) row.querySelector(".i-pihak").value = pihak;
   if (solve) row.querySelector(".i-solve").value = solve;
   row.querySelector(".i-del").addEventListener("click", () => row.remove());
 }
 function collectIssues() {
   return [...document.querySelectorAll("#rows-issue .issue-row")].map((r) => ({
-    nama: r.querySelector(".i-nama").value.trim(),
     level: r.querySelector(".i-level").value,
-    ket: r.querySelector(".i-ket").value.trim(),
+    nama: r.querySelector(".i-nama").value.trim(),
+    pihak: r.querySelector(".i-pihak").value.trim(),
     solve: r.querySelector(".i-solve").value.trim(),
-  })).filter((x) => x.nama || x.ket || x.solve);
+  })).filter((x) => x.level && x.level !== "Tidak Ada");   // hanya yang benar-benar ada issue
 }
 
 async function simpan() {
@@ -444,9 +452,9 @@ async function simpan() {
     // Issue paket (hanya yang diisi); kalau tak ada issue -> tak ada kolom issue
     collectIssues().forEach((it, i) => {
       const n = i + 1;
-      record["Issue " + n + " Nama"] = it.nama;
       record["Issue " + n + " Level"] = it.level;
-      record["Issue " + n + " Keterangan"] = it.ket;
+      record["Issue " + n + " Nama"] = it.nama;
+      record["Issue " + n + " Pihak (penyelenggara)"] = it.pihak;
       record["Issue " + n + " Problem Solving"] = it.solve;
     });
     record["Nilai Capaian (%)"] = $("f-nilai").value;
@@ -464,14 +472,20 @@ async function simpan() {
   if (!API_URL) { msg.textContent = "Tersimpan (mode contoh — belum ke Sheets)."; msg.classList.add("ok"); return; }
 
   msg.textContent = "Menyimpan...";
+  // Kalau sedang mengisi milestone (EDIT_ID ada) -> update baris itu (jadi On-Going)
+  const body = EDIT_ID
+    ? { action: "update_flex", token: SESSION.token, id: EDIT_ID, record: record }
+    : { action: "write_flex", token: SESSION.token, program: program, record: record };
   try {
     const res = await fetch(API_URL, {
       method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "write_flex", token: SESSION.token, program: program, record: record }),
+      body: JSON.stringify(body),
     });
     const out = await res.json();
     if (out.ok) {
-      msg.textContent = "✅ Tersimpan. Isi lagi atau klik 'Tambahkan data lainnya'."; msg.classList.add("ok");
+      msg.textContent = EDIT_ID ? "✅ Milestone terisi & tersimpan." : "✅ Tersimpan. Isi lagi atau klik 'Tambahkan data lainnya'.";
+      msg.classList.add("ok");
+      EDIT_ID = null;
       clearForm();
       await loadFlex(); renderFlexTable(program);
     } else {
@@ -484,12 +498,59 @@ async function simpan() {
 
 // kosongkan form ke bentuk awal (untuk input baru)
 function clearForm() {
+  EDIT_ID = null;
   ["f-tanggal", "f-kegiatan", "f-fase", "f-lokasi", "f-nilai", "f-feedback"].forEach((id) => { if ($(id)) $(id).value = ""; });
   if ($("f-keberjalanan")) $("f-keberjalanan").selectedIndex = 0;
   ["rows-peserta", "rows-sdm", "rows-issue", "extra-cols"].forEach((id) => { if ($(id)) $(id).innerHTML = ""; });
   // seed baris default peserta & SDM lagi
   addPesertaRow("SMA"); addPesertaRow("Universitas"); addSDMRow("Dosen");
   setInputMode("ongoing");
+}
+
+// tampilkan milestone aktif (di atas tabel) + tombol Isi
+function renderMilestoneBanner(key) {
+  const host = $("milestone-banner"); if (!host) return;
+  const label = labelOf(key);
+  const flex = FLEX_CACHE || { rows: [] };
+  const items = flex.rows.filter((r) =>
+    String(r["Program"] || "") === label &&
+    String(r["Mode"] || "") === "Upcoming Milestone" &&
+    milestoneActive(r));
+  if (!items.length) { host.innerHTML = ""; host.style.display = "none"; return; }
+  host.style.display = "";
+  host.innerHTML = '<div class="ms-banner-title">📌 Upcoming Milestone aktif — siap diisi</div>' +
+    items.map((r) => {
+      const nm = r["Nama Kegiatan"] || "(tanpa nama)";
+      const tg = r["Tanggal Kegiatan"] || "(belum ada tanggal)";
+      const id = r["ID"] || "";
+      return `<div class="ms-banner-row"><div><b>${nm}</b> · ${tg}</div>` +
+        `<button class="btn-primary ms-fill" data-id="${id}">✍ Isi data</button></div>`;
+    }).join("");
+  host.querySelectorAll(".ms-fill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const row = items.find((x) => String(x["ID"]) === btn.dataset.id);
+      if (row) fillMilestone(row);
+    });
+  });
+}
+
+function fillMilestone(row) {
+  // buka form + prefill identitas dari milestone, tandai sebagai edit baris itu
+  const ff = $("form-fields"); if (ff) ff.hidden = false;
+  if ($("btn-show-form")) $("btn-show-form").textContent = "✖ Tutup Form";
+  clearForm();
+  EDIT_ID = row["ID"] || null;
+  if ($("f-kegiatan")) $("f-kegiatan").value = row["Nama Kegiatan"] || "";
+  if ($("f-tanggal")) $("f-tanggal").value = toDateInput(row["Tanggal Kegiatan"]);
+  if ($("f-fase")) $("f-fase").value = row["Fase Kegiatan"] || "";
+  if ($("f-lokasi")) $("f-lokasi").value = row["Lokasi / Alamat"] || "";
+  setInputMode("ongoing");   // saat diisi jadi data on-going
+  ff.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function toDateInput(v) {
+  if (!v) return "";
+  const d = new Date(v); if (isNaN(d)) return "";
+  return d.toISOString().slice(0, 10);
 }
 
 // ------------------------------------------------------------- filters ------
@@ -667,6 +728,7 @@ async function loadFlex() {
 }
 
 function renderFlexTable(key) {
+  renderMilestoneBanner(key);
   const label = labelOf(key);
   const thead = document.querySelector("#flex-table thead");
   const tbody = document.querySelector("#flex-table tbody");
