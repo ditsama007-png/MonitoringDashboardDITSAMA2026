@@ -573,10 +573,12 @@ function renderMilestoneBanner(key) {
   const host = $("milestone-banner"); if (!host) return;
   const label = labelOf(key);
   const flex = FLEX_CACHE || { rows: [] };
-  const items = flex.rows.filter((r) =>
-    String(r["Program"] || "") === label &&
-    String(r["Mode"] || "") === "Upcoming Milestone" &&
-    milestoneActive(r));
+  const items = flex.rows.filter((r) => {
+    const p = String(r["Program"] || "");
+    return (p === key || p === label) &&
+      String(r["Mode"] || "") === "Upcoming Milestone" &&
+      milestoneActive(r);
+  });
   if (!items.length) { host.innerHTML = ""; host.style.display = "none"; return; }
   host.style.display = "";
   host.innerHTML = '<div class="ms-banner-title">📌 Upcoming Milestone aktif — siap diisi</div>' +
@@ -805,11 +807,11 @@ function renderFlexTable(key) {
   if (!thead || !tbody) return;
   const flex = FLEX_CACHE || { header: [], rows: [] };
   const header = (flex.header.length ? flex.header : ["ID", "Waktu Input", "Program", "PIC"]);
-  // Di Input Data: hanya data milik PIC yang login (dashboard portfolio tetap semua)
-  const myName = SESSION ? String(SESSION.nama).toLowerCase() : "";
-  const rows = flex.rows.filter((r) =>
-    String(r["Program"] || "") === label &&
-    String(r["PIC"] || "").toLowerCase() === myName);
+  // tampilkan semua data untuk program terpilih (cocokkan kode ATAU label)
+  const rows = flex.rows.filter((r) => {
+    const p = String(r["Program"] || "");
+    return p === key || p === label;
+  });
   thead.innerHTML = "<tr>" + header.map((h) => `<th>${h}</th>`).join("") + "<th>Aksi</th></tr>";
   if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="${header.length + 1}" class="empty">Belum ada data untuk ${label}.</td></tr>`;
