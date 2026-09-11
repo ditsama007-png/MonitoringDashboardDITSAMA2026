@@ -464,7 +464,8 @@ function handleUploadSK_(b) {
     var bytes = Utilities.base64Decode(b.data);
     var blob = Utilities.newBlob(bytes, b.mime || "application/octet-stream", b.name || "SK");
     var file = getSKFolder_().createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    // set sharing dibungkus terpisah — kalau gagal, upload tetap dianggap sukses
+    try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e2) {}
     return json_({ ok: true, url: file.getUrl(), name: file.getName() });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
