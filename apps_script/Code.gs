@@ -35,6 +35,7 @@ var DATA_START_ROW = 9;
 // ---- AUTH: sheet penyimpan akun + aturan akses per jabatan ----
 var USERS_SHEET = "Users";
 var SALT = "ditsama-2026-salt";   // ganti dengan teks acak rahasia kamu
+var ACCESS_PASSWORD = "Ditsama_30";   // password akses (blur) — cek di server
 
 // jabatan -> program yang boleh diisi
 var ROLE_ACCESS = {
@@ -103,6 +104,7 @@ function doPost(e) {
     if (body.action === "login")  return handleLogin_(body);
     if (body.action === "send_code") return handleSendCode_(body);
     if (body.action === "reset")  return handleReset_(body);
+    if (body.action === "check_access") return json_({ ok: String(body.password || "") === ACCESS_PASSWORD });
     if (body.action === "write_flex") return handleWriteFlex_(body);
     if (body.action === "read_flex")  return handleReadFlex_(body);
     if (body.action !== "write")  return json_({ ok: false, error: "aksi tidak dikenal" });
