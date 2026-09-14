@@ -121,6 +121,7 @@ function render() {
   renderPivot(rows);
   renderDetail(rows);
   renderCalendar(rows);
+  renderPeserta();
 }
 
 // ---- Kalender kegiatan (di dashboard) ----
@@ -295,6 +296,85 @@ function renderParticipant(rows) {
       ] },
     options: { responsive: true, plugins: { legend: { position: "top" } } },
   });
+}
+
+// ===== Analisis Peserta dari DataMasuk (ikut filter Program & Bulan) =====
+let chartPesertaKeg = null;
+function renderPeserta() {
+  const flex = FLEX_CACHE || { header: [], rows: [] };
+  // filter dari kontrol dashboard
+  const fp = selValue($("flt-program"));   // "Semua" atau label program
+  const fb = selValue($("flt-bulan"));      // "Semua" atau "YYYY-MM"
+  let rows = flex.rows.slice();
+  if (fp && fp !== "Semua") rows = rows.filter((r) => labelFromStored(r["Program"]) === fp);
+  if (fb && fb !== "Semua") rows = rows.filter((r) => monthKey(r["Tanggal Kegiatan"]) === fb);
+
+  // kolom peserta: "Peserta X (terdaftar)" / "(hadir)"
+  const header = flex.header || [];
+  const catSet = {};
+  header.forEach((h) => {
+    let m = /^Peserta (.+) \(terdaftar\)$/.exec(h); if (m) catSet[m[1]] = 1;
+    m = /^Peserta (.+) \(hadir\)$/.exec(h); if (m) catSet[m[1]] = 1;
+  });
+  const cats = Object.keys(catSet);
+
+  // agregasi per kegiatan (baris) + per kategori
+  let totDaftar = 0, totHadir = 0, jmlKeg = 0;
+  const perKat = {}; cats.forEach((c) => perKat[c] = { ter: 0, had: 0 });
+  const kegLabels = [], kegTer = [], kegHad = [];
+  rows.forEach((r) => {
+    let rowTer = 0, rowHad = 0, ada = false;
+    cats.forEach((c) => {
+      const ter = num(r["Peserta " + c + " (terdaftar)"]);
+      const had = num(r["Peserta " + c + " (hadir)"]);
+      if (ter || had) ada = true;
+      perKat[c].ter += ter; perKat[c].had += had;
+      rowTer += ter; rowHad += had;
+    });
+    if (ada) {
+      jmlKeg++; totDaftar += rowTer; totHadir += rowHad;
+      kegLabels.push((r["Nama Kegiatan"] || "-").slice(0, 18));
+      kegTer.push(rowTer); kegHad.push(rowHad);
+    }
+  });
+
+  if ($("ps-keg")) $("ps-keg").textContent = jmlKeg;
+  if ($("ps-daftar")) $("ps-daftar").textContent = totDaftar.toLocaleString("id-ID");
+  if ($("ps-hadir")) $("ps-hadir").textContent = totHadir.toLocaleString("id-ID");
+  if ($("ps-rate")) $("ps-rate").textContent = totDaftar > 0 ? Math.round(totHadir / totDaftar * 100) + "%" : "0%";
+
+  // chart per kegiatan
+  const ctx = $("chart-peserta-keg");
+  if (ctx && typeof Chart !== "undefined") {
+    if (chartPesertaKeg) chartPesertaKeg.destroy();
+    chartPesertaKeg = new Chart(ctx, {
+      type: "bar",
+      data: { labels: kegLabels.length ? kegLabels : ["(belum ada data)"],
+        datasets: [
+          { label: "Terdaftar", data: kegTer, backgroundColor: "#9EC1E6" },
+          { label: "Hadir", data: kegHad, backgroundColor: "#2F6FB0" },
+        ] },
+      options: { responsive: true, plugins: { legend: { position: "top" } }, scales: { y: { beginAtZero: true } } },
+    });
+  }
+
+  // tabel per kategori
+  const thead = document.querySelector("#peserta-kategori thead");
+  const tbody = document.querySelector("#peserta-kategori tbody");
+  if (thead) thead.innerHTML = "<tr><th>Jenis</th><th>Terdaftar</th><th>Hadir</th><th>% Hadir</th></tr>";
+  if (tbody) {
+    if (!cats.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Belum ada data peserta.</td></tr>'; }
+    else tbody.innerHTML = cats.map((c) => {
+      const t = perKat[c].ter, h = perKat[c].had;
+      const pct = t > 0 ? Math.round(h / t * 100) + "%" : "0%";
+      return `<tr><td>${c}</td><td>${t}</td><td>${h}</td><td>${pct}</td></tr>`;
+    }).join("");
+  }
+}
+function monthKey(v) {
+  if (!v) return "";
+  const d = new Date(v); if (isNaN(d)) return "";
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
 }
 
 function renderIssues(rows) {
@@ -839,6 +919,7 @@ async function loadFlex() {
   } catch (e) { console.error("read_flex gagal:", e); }
   buildColHistory();
   renderNavBadges();
+  if ($("view-dash") && !$("view-dash").hidden) renderPeserta();
 }
 
 // riwayat semua nama kolom yang pernah ada (dari semua program) -> datalist
