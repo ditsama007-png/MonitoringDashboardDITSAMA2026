@@ -318,3 +318,11 @@ tbody tr:nth-child(even){background:#F8FAFD}
 .mitra-ph{width:100%;height:70px;border-radius:6px;background:#EEF2F9;color:#1B3A6B;font-weight:800;
   font-size:1.4rem;display:flex;align-items:center;justify-content:center}
 .mitra-nm{font-size:.78rem;font-weight:600;color:#1A2233;margin-top:.4rem;line-height:1.2}
+
+/* ===== Strip komponen performa (atas dashboard) ===== */
+.perf-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.7rem;margin-bottom:1rem}
+.perf-item{display:flex;align-items:center;gap:.6rem;background:#fff;border:1px solid #E5EAF2;
+  border-radius:12px;padding:.7rem .85rem;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.perf-ic{font-size:1.5rem;line-height:1;background:#EEF3FB;border-radius:10px;padding:.4rem .5rem}
+.perf-val{font-size:1.35rem;font-weight:800;color:#1B3A6B;line-height:1}
+.perf-nm{font-size:.72rem;color:#6B7688;font-weight:600;margin-top:2px}
