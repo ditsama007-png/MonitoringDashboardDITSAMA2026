@@ -1174,10 +1174,22 @@ async function updateRow(id, record, key) {
 
 function editRow(tr, r, key) {
   const skip = { "ID": 1, "Waktu Input": 1, "Program": 1, "PIC": 1 };
+  const readonly = { "Kehadiran (%)": 1 };   // otomatis, tak boleh diedit
+  const kolomBerjalanan = "Keberjalanan Kegiatan";
   [...tr.querySelectorAll("td")].forEach((td) => {
     const col = td.dataset.col;
     if (!col || skip[col]) return;
     const val = td.textContent;
+    if (readonly[col]) {
+      td.innerHTML = `<span style="color:#6B7688;font-style:italic;">${val || "otomatis"}</span>`;
+      return;
+    }
+    if (col === kolomBerjalanan) {
+      const opts = ["", ...(typeof OPSI_KEBERJALANAN !== "undefined" ? OPSI_KEBERJALANAN : ["Sesuai Rencana", "Ada Kendala", "Tidak Sesuai Rencana", "Tidak Ada Penilaian"])];
+      td.innerHTML = '<select style="width:100%;height:30px;">' +
+        opts.map((o) => `<option${o === val ? " selected" : ""}>${o}</option>`).join("") + "</select>";
+      return;
+    }
     td.innerHTML = `<input value="${String(val).replace(/"/g, "&quot;")}" style="width:100%;height:30px;">`;
   });
   const act = tr.querySelector(".act-cell");
@@ -1186,9 +1198,17 @@ function editRow(tr, r, key) {
   act.querySelector(".ok").addEventListener("click", () => {
     const rec = {};
     [...tr.querySelectorAll("td")].forEach((td) => {
-      const col = td.dataset.col; const inp = td.querySelector("input");
-      if (col && inp && !skip[col]) rec[col] = inp.value;
+      const col = td.dataset.col; if (!col || skip[col] || readonly[col]) return;
+      const field = td.querySelector("input, select");
+      if (field) rec[col] = field.value;
     });
+    // hitung ulang Kehadiran (%) otomatis dari peserta terdaftar/hadir
+    let tt = 0, th = 0;
+    Object.keys(rec).forEach((k) => {
+      if (/^Peserta .+ \(terdaftar\)$/i.test(k)) tt += num(rec[k]);
+      if (/^Peserta .+ \(hadir\)$/i.test(k)) th += num(rec[k]);
+    });
+    if (tt > 0) rec["Kehadiran (%)"] = Math.round(th / tt * 100);
     updateRow(r["ID"], rec, key);
   });
 }
