@@ -305,3 +305,16 @@ tbody tr:nth-child(even){background:#F8FAFD}
   min-width:2%;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .gantt-bar span{color:#fff;font-size:.68rem;font-weight:600;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gantt-axis{display:flex;justify-content:space-between;font-size:.7rem;color:#6B7688;margin-left:118px;margin-top:2px}
+
+/* legenda program di Gantt */
+.gantt-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;padding-top:8px;border-top:1px solid #E5EAF2}
+.gantt-legend span{display:flex;align-items:center;gap:5px;font-size:.75rem;color:#444}
+.gantt-legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+/* ===== Showcase Mitra ===== */
+.mitra-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin-top:.6rem}
+.mitra-card{border:1px solid #E5EAF2;border-radius:10px;padding:.7rem;text-align:center;background:#fff}
+.mitra-card img{width:100%;height:70px;object-fit:contain;border-radius:6px}
+.mitra-ph{width:100%;height:70px;border-radius:6px;background:#EEF2F9;color:#1B3A6B;font-weight:800;
+  font-size:1.4rem;display:flex;align-items:center;justify-content:center}
+.mitra-nm{font-size:.78rem;font-weight:600;color:#1A2233;margin-top:.4rem;line-height:1.2}
