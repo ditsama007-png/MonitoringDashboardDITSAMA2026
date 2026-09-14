@@ -95,33 +95,87 @@ function assignIds() {
 }
 
 function render() {
-  assignIds();
-  $("demo-banner").hidden = !IS_DEMO;
-  const rows = rowsForFilter();
+  $("demo-banner").hidden = true;
+  const rows = flexRowsFiltered();
 
-  // KPI
-  let anggaran = 0, realisasi = 0, actual = 0;
-  rows.forEach((r) => { anggaran += +r.anggaran || 0; realisasi += +r.realisasi || 0; actual += +r.actual || 0; });
-  // progress keseluruhan = rata-rata progress per program yang tampil
-  const progList = [];
+  // KPI baru (dari DataMasuk)
+  let totHadir = 0, totDaftar = 0;
+  rows.forEach((r) => { totHadir += r.actual || 0; totDaftar += r.target || 0; });
   const shownProgs = [...new Set(rows.map((r) => r._prog))];
+  const progList = [];
   shownProgs.forEach((k) => { const pr = programProgress(rows.filter((r) => r._prog === k)); if (pr > 0) progList.push(pr); });
   const overall = progList.length ? progList.reduce((a, b) => a + b, 0) / progList.length : 0;
 
-  $("kpi-progress").textContent = pct(overall);
-  $("kpi-anggaran").textContent = fmtRupiah(anggaran);
-  $("kpi-realisasi").textContent = fmtRupiah(realisasi);
-  $("kpi-peserta").textContent = actual.toLocaleString("id-ID");
+  if ($("kpi-progress")) $("kpi-progress").textContent = pct(overall);
+  if ($("kpi-keg")) $("kpi-keg").textContent = rows.filter((r) => (r.kegiatan || "").trim()).length;
+  if ($("kpi-hadir")) $("kpi-hadir").textContent = totHadir.toLocaleString("id-ID");
+  if ($("kpi-rate")) $("kpi-rate").textContent = totDaftar > 0 ? Math.round(totHadir / totDaftar * 100) + "%" : "0%";
 
   renderPortfolio(rows, shownProgs);
-  renderFinance(rows);
-  renderParticipant(rows);
   renderIssues(rows);
   renderMilestones(rows);
   renderPivot(rows);
   renderDetail(rows);
   renderCalendar(rows);
   renderPeserta();
+}
+
+// ---- konversi baris DataMasuk -> bentuk standar yang dipakai render lama ----
+function keyFromStored(p) {
+  p = String(p || "");
+  const f = PROGRAMS.find((x) => x.key === p || x.label === p);
+  return f ? f.key : p;
+}
+function sumColsMatch(r, re) {
+  let s = 0; Object.keys(r).forEach((k) => { if (re.test(k)) s += num(r[k]); }); return s;
+}
+function primaryIssue(r) {
+  const rank = { High: 3, Medium: 2, Low: 1 };
+  let best = "", bestName = "";
+  Object.keys(r).forEach((k) => {
+    const m = /^Issue \d+ Level$/.exec(k) || (k === "Level Isu" ? [k] : null);
+    if (m) {
+      const lv = String(r[k] || "");
+      if (rank[lv] && (!best || rank[lv] > rank[best])) {
+        best = lv;
+        const nk = k === "Level Isu" ? "Keterangan Isu" : k.replace("Level", "Nama");
+        bestName = r[nk] || "";
+      }
+    }
+  });
+  return { level: best, name: bestName };
+}
+function flexToStd(r) {
+  const iss = primaryIssue(r);
+  return {
+    id: r["ID"] || "",
+    _prog: keyFromStored(r["Program"]),
+    kegiatan: r["Nama Kegiatan"] || "",
+    tanggal: r["Tanggal Kegiatan"] || "",
+    anggaran: sumColsMatch(r, /anggaran/i),
+    realisasi: sumColsMatch(r, /realisasi/i),
+    target: sumColsMatch(r, /^Peserta .+ \(terdaftar\)$/i),
+    actual: sumColsMatch(r, /^Peserta .+ \(hadir\)$/i),
+    nilai: num(r["Nilai Capaian (%)"]) / 100,
+    hadir: num(r["Kehadiran (%)"]) / 100,
+    feedback: num(r["Feedback (%)"]) / 100,
+    keberjalanan: r["Keberjalanan Kegiatan"] || "",
+    level: iss.level,
+    ketisu: iss.name || r["Keterangan Isu"] || "",
+    jenis: String(r["Mode"] || "") === "Upcoming Milestone" ? (r["Nama Kegiatan"] || "Milestone") : "",
+  };
+}
+function flexRowsFiltered() {
+  const flex = FLEX_CACHE || { rows: [] };
+  let rows = flex.rows.map(flexToStd);
+  const fpLabel = selValue($("flt-program")), fb = selValue($("flt-bulan")),
+        fk = selValue($("flt-kegiatan")), fl = selValue($("flt-level"));
+  const fp = filterProgramToKey(fpLabel);
+  if (fp && fp !== "Semua") rows = rows.filter((r) => r._prog === fp);
+  if (fb && fb !== "Semua") rows = rows.filter((r) => monthLabel(r.tanggal) === fb);
+  if (fk && fk !== "Semua") rows = rows.filter((r) => r.kegiatan === fk);
+  if (fl && fl !== "Semua") rows = rows.filter((r) => (r.level || "") === fl);
+  return rows;
 }
 
 // ---- Kalender kegiatan (di dashboard) ----
@@ -265,6 +319,7 @@ function aggByMonth(rows, fields) {
 }
 
 function renderFinance(rows) {
+  if (!document.getElementById("chart-finance")) return;
   const agg = aggByMonth(rows, ["anggaran", "realisasi"]);
   const ctx = $("chart-finance");
   if (chartFinance) chartFinance.destroy();
@@ -281,6 +336,7 @@ function renderFinance(rows) {
 }
 
 function renderParticipant(rows) {
+  if (!document.getElementById("chart-participant")) return;
   const agg = aggByMonth(rows, ["target", "actual"]);
   let ct = 0, ca = 0;
   const labels = [], tData = [], aData = [];
@@ -744,9 +800,8 @@ function toDateInput(v) {
 function rebuildFilters() {
   // Program
   fillSelect($("flt-program"), ["Semua", ...PROGRAMS.map((p) => p.label)], selValue($("flt-program")));
-  // kumpulkan semua baris
-  const all = [];
-  Object.keys(DATA).forEach((k) => (DATA[k] || []).forEach((r) => all.push({ ...r, _prog: k })));
+  // kumpulkan semua baris dari DataMasuk (dikonversi)
+  const all = ((FLEX_CACHE && FLEX_CACHE.rows) || []).map(flexToStd);
   // Bulan
   const bulan = [...new Set(all.map((r) => monthLabel(r.tanggal)).filter(Boolean))]
     .sort((a, b) => new Date("1 " + a) - new Date("1 " + b));
@@ -1360,16 +1415,17 @@ async function init() {
   try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
   $("auth-gate").style.display = "";
 
-  // --- lalu muat data dashboard (dibungkus try/catch supaya tak ganggu login) ---
+  // --- muat data (DataMasuk utama untuk dashboard) ---
   try {
-    await loadData();
+    await loadFlex();          // data utama dari DataMasuk
+    await loadData();          // data lama (_2026) untuk cadangan/kalender bila ada
     rebuildFilters();
     render();
   } catch (e) { console.error("Gagal muat data:", e); }
 
   $("btn-simpan").addEventListener("click", simpan);
   $("in-program").addEventListener("change", () => renderInput($("in-program").value));
-  $("btn-refresh").addEventListener("click", async () => { await loadData(); rebuildFilters(); renderTable(); render(); });
+  $("btn-refresh").addEventListener("click", async () => { await loadFlex(); await loadData(); rebuildFilters(); render(); });
   if ($("cal-prev")) $("cal-prev").addEventListener("click", () => calShift(-1));
   if ($("cal-next")) $("cal-next").addEventListener("click", () => calShift(1));
   if ($("btn-add-col")) $("btn-add-col").addEventListener("click", () => addExtraCol());
