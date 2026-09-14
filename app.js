@@ -73,6 +73,7 @@ function programProgress(rows) {
     ["nilai", "hadir", "feedback"].forEach((k) => { if (r[k] > 0) comps.push(Math.min(r[k], 1)); });
     const kb = KEBER_SKOR[(r.keberjalanan || "").toLowerCase()];
     if (kb !== undefined) comps.push(kb);
+    if (r.issueAlert !== undefined) comps.push(r.issueAlert);   // komponen Issue & Alert
     if (comps.length) scores.push(comps.reduce((a, b) => a + b, 0) / comps.length);
   });
   return scores.length ? Math.min(scores.reduce((a, b) => a + b, 0) / scores.length, 1) : 0;
@@ -113,6 +114,18 @@ function render() {
   if ($("kpi-upcoming")) $("kpi-upcoming").textContent = rows.filter((r) => r.status === "Upcoming").length;
   if ($("kpi-ongoing")) $("kpi-ongoing").textContent = rows.filter((r) => r.status === "On-Going").length;
   if ($("kpi-selesai")) $("kpi-selesai").textContent = totSelesai;
+
+  // strip komponen performa (rata-rata, dalam %)
+  const avgOf = (getter) => {
+    const vals = rows.map(getter).filter((v) => v !== null && v !== undefined && !isNaN(v));
+    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+  };
+  const kbScore = (r) => { const s = KEBER_SKOR[(r.keberjalanan || "").toLowerCase()]; return s === undefined ? null : s * 100; };
+  if ($("ps-nilai")) $("ps-nilai").textContent = avgOf((r) => r.nilai > 0 ? r.nilai * 100 : null) + "%";
+  if ($("ps-hadir")) $("ps-hadir").textContent = avgOf((r) => r.hadir > 0 ? r.hadir * 100 : null) + "%";
+  if ($("ps-keber")) $("ps-keber").textContent = avgOf(kbScore) + "%";
+  if ($("ps-feedback")) $("ps-feedback").textContent = avgOf((r) => r.feedback > 0 ? r.feedback * 100 : null) + "%";
+  if ($("ps-issue")) $("ps-issue").textContent = avgOf((r) => r.issueAlert !== undefined ? r.issueAlert * 100 : null) + "%";
 
   renderPortfolio(rows, shownProgs);
   renderIssues(rows);
@@ -176,6 +189,7 @@ function flexToStd(r) {
     ketisu: iss.name || r["Keterangan Isu"] || "",
     issuePihak: iss.pihak || "",
     issueSolve: iss.solve || "",
+    issueAlert: ({ "High": 0.4, "Medium": 0.6, "Low": 0.8 })[iss.level] !== undefined ? ({ "High": 0.4, "Medium": 0.6, "Low": 0.8 })[iss.level] : 1,
     pic: r["PIC"] || "",
     jenis: String(r["Mode"] || "") === "Upcoming Milestone" ? (r["Nama Kegiatan"] || "Milestone") : "",
     status: statusOf(r),
