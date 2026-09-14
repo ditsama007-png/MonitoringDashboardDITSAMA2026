@@ -121,11 +121,11 @@ function render() {
     return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
   };
   const kbScore = (r) => { const s = KEBER_SKOR[(r.keberjalanan || "").toLowerCase()]; return s === undefined ? null : s * 100; };
-  if ($("ps-nilai")) $("ps-nilai").textContent = avgOf((r) => r.nilai > 0 ? r.nilai * 100 : null) + "%";
-  if ($("ps-hadir")) $("ps-hadir").textContent = avgOf((r) => r.hadir > 0 ? r.hadir * 100 : null) + "%";
-  if ($("ps-keber")) $("ps-keber").textContent = avgOf(kbScore) + "%";
-  if ($("ps-feedback")) $("ps-feedback").textContent = avgOf((r) => r.feedback > 0 ? r.feedback * 100 : null) + "%";
-  if ($("ps-issue")) $("ps-issue").textContent = avgOf((r) => r.issueAlert !== undefined ? r.issueAlert * 100 : null) + "%";
+  if ($("perf-nilai")) $("perf-nilai").textContent = avgOf((r) => r.nilai > 0 ? r.nilai * 100 : null) + "%";
+  if ($("perf-hadir")) $("perf-hadir").textContent = avgOf((r) => r.hadir > 0 ? r.hadir * 100 : null) + "%";
+  if ($("perf-keber")) $("perf-keber").textContent = avgOf(kbScore) + "%";
+  if ($("perf-feedback")) $("perf-feedback").textContent = avgOf((r) => r.feedback > 0 ? r.feedback * 100 : null) + "%";
+  if ($("perf-issue")) $("perf-issue").textContent = avgOf((r) => r.issueAlert !== undefined ? r.issueAlert * 100 : null) + "%";
 
   renderPortfolio(rows, shownProgs);
   renderIssues(rows);
