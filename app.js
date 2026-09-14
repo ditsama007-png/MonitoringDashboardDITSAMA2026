@@ -106,11 +106,13 @@ function render() {
   shownProgs.forEach((k) => { const pr = programProgress(rows.filter((r) => r._prog === k)); if (pr > 0) progList.push(pr); });
   const overall = progList.length ? progList.reduce((a, b) => a + b, 0) / progList.length : 0;
 
-  if ($("kpi-progress")) $("kpi-progress").textContent = pct(overall);
-  if ($("kpi-keg")) $("kpi-keg").textContent = rows.filter((r) => (r.kegiatan || "").trim()).length;
+  const totKeg = rows.filter((r) => (r.kegiatan || "").trim()).length;
+  const totSelesai = rows.filter((r) => (r.kegiatan || "").trim() && r.status === "Selesai").length;
+  if ($("kpi-progress")) $("kpi-progress").textContent = totKeg > 0 ? Math.round(totSelesai / totKeg * 100) + "%" : "0%";
+  if ($("kpi-keg")) $("kpi-keg").textContent = totKeg;
   if ($("kpi-upcoming")) $("kpi-upcoming").textContent = rows.filter((r) => r.status === "Upcoming").length;
   if ($("kpi-ongoing")) $("kpi-ongoing").textContent = rows.filter((r) => r.status === "On-Going").length;
-  if ($("kpi-selesai")) $("kpi-selesai").textContent = rows.filter((r) => r.status === "Selesai").length;
+  if ($("kpi-selesai")) $("kpi-selesai").textContent = totSelesai;
 
   renderPortfolio(rows, shownProgs);
   renderIssues(rows);
@@ -303,7 +305,7 @@ function renderPortfolio(rows, progs) {
         <div class="nm">${labelOf(k)}<small>Kegiatan selesai / total</small></div>
         <div class="cnt">${selesai} / ${total}</div>
         <div><div class="bar"><span style="width:${Math.min(p,100)}%"></span></div>
-             <div class="pct">${p}%</div></div>
+             <div class="pct">${p}% <small style="font-weight:400;color:#6B7688;">Nilai Performance</small></div></div>
         <div class="badge ${cls}">${stat}</div>
       </div>`);
   });
@@ -1278,13 +1280,13 @@ function renderProgramDash(key) {
   const label = labelOf(key);
   const flex = FLEX_CACHE || { rows: [] };
   const rows = flex.rows.filter((r) => { const p = String(r["Program"] || ""); return p === key || p === label; }).map(flexToStd);
-  const prog = Math.round(programProgress(rows) * 100);
-  // anggaran/realisasi dari sheet Financial
+  const total = rows.filter((r) => (r.kegiatan || "").trim()).length;
+  const selesai = rows.filter((r) => (r.kegiatan || "").trim() && r.status === "Selesai").length;
   const fin = finForProgram(key);
-  if ($("pk-progress")) $("pk-progress").textContent = prog + "%";
+  if ($("pk-progress")) $("pk-progress").textContent = total > 0 ? Math.round(selesai / total * 100) + "%" : "0%";
   if ($("pk-upcoming")) $("pk-upcoming").textContent = rows.filter((r) => r.status === "Upcoming").length;
   if ($("pk-ongoing")) $("pk-ongoing").textContent = rows.filter((r) => r.status === "On-Going").length;
-  if ($("pk-selesai")) $("pk-selesai").textContent = rows.filter((r) => r.status === "Selesai").length;
+  if ($("pk-selesai")) $("pk-selesai").textContent = selesai;
   if ($("pk-anggaran")) $("pk-anggaran").textContent = fmtRupiah(fin.ang);
   if ($("pk-realisasi")) $("pk-realisasi").textContent = fmtRupiah(fin.ang - fin.real);
 }
