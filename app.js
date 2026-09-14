@@ -135,6 +135,7 @@ function render() {
   renderCalendar(rows);
   renderDashGantt();
   renderPeserta();
+  renderMitra();
 }
 
 // ---- konversi baris DataMasuk -> bentuk standar yang dipakai render lama ----
@@ -1007,7 +1008,6 @@ function showView(view) {
     renderProgramDash(view);
     renderProgramMilestones(view);
     renderGantt(view);
-    renderMitra(view);
     renderProgFlexTable(view);
   }
 }
@@ -1234,33 +1234,65 @@ function driveThumb(url) {
   const m = String(url).match(/[-\w]{25,}/);
   return m ? ("https://drive.google.com/thumbnail?id=" + m[0] + "&sz=w400") : "";
 }
-// showcase Mitra: logo + nama (dari kolom SDM Mitra + SK Mitra)
-function renderMitra(key) {
-  const host = $("prog-mitra"); if (!host) return;
-  const label = labelOf(key);
+// kumpulkan mitra (nama+logo) dari DataMasuk sesuai filter dashboard
+function getMitraFiltered() {
   const flex = FLEX_CACHE || { rows: [] };
-  const rows = flex.rows.filter((r) => { const p = String(r["Program"] || ""); return p === key || p === label; });
+  const fpLabel = selValue($("flt-program")), fb = selValue($("flt-bulan"));
+  const fp = filterProgramToKey(fpLabel);
+  let raw = flex.rows.slice();
+  if (fp && fp !== "Semua") raw = raw.filter((r) => keyFromStored(r["Program"]) === fp);
+  if (fb && fb !== "Semua") raw = raw.filter((r) => monthLabel(r["Tanggal Kegiatan"]) === fb);
   const mitra = [];
-  rows.forEach((r) => {
+  raw.forEach((r) => {
     Object.keys(r).forEach((k) => {
-      const m = /^SDM Mitra - Nama \d+$/.exec(k);
-      if (m && String(r[k] || "").trim()) {
+      if (/^SDM Mitra - Nama \d+$/.test(k) && String(r[k] || "").trim()) {
         const nama = String(r[k]).trim();
         const logo = driveThumb(r["SK Mitra (" + nama + ")"] || "");
-        if (!mitra.some((x) => x.nama === nama)) mitra.push({ nama, logo });
+        const prog = labelFromStored(r["Program"]);
+        if (!mitra.some((x) => x.nama === nama)) mitra.push({ nama, logo, prog });
       }
     });
   });
-  if (!mitra.length) { host.innerHTML = '<div class="empty">Belum ada data mitra.</div>'; return; }
-  host.innerHTML = '<div class="mitra-grid">' + mitra.map((mt) => {
-    const img = mt.logo
-      ? '<img src="' + mt.logo + '" alt="' + mt.nama + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
-      : "";
+  return mitra;
+}
+
+let MITRA_TIMER = null, MITRA_IDX = 0;
+function renderMitra() {
+  const host = $("mitra-slideshow"); if (!host) return;
+  const mitra = getMitraFiltered();
+  if (MITRA_TIMER) { clearInterval(MITRA_TIMER); MITRA_TIMER = null; }
+  if (!mitra.length) { host.innerHTML = '<div class="empty">Belum ada data mitra.</div>'; renderMitraTable(mitra); return; }
+  MITRA_IDX = 0;
+  const slide = (mt) => {
     const initials = mt.nama.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-    return '<div class="mitra-card">' + img +
+    const img = mt.logo
+      ? '<img src="' + mt.logo + '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+      : "";
+    return '<div class="mitra-slide">' + img +
       '<div class="mitra-ph"' + (mt.logo ? ' style="display:none;"' : "") + '>' + initials + '</div>' +
-      '<div class="mitra-nm">' + mt.nama + '</div></div>';
-  }).join("") + "</div>";
+      '<div class="mitra-nm">' + mt.nama + '<small>' + mt.prog + '</small></div></div>';
+  };
+  const paint = () => { host.querySelector(".mitra-stage").innerHTML = slide(mitra[MITRA_IDX]); host.querySelector(".mitra-count").textContent = (MITRA_IDX + 1) + " / " + mitra.length; };
+  host.innerHTML =
+    '<div class="mitra-show">' +
+      '<button class="mitra-arrow" id="mitra-prev">‹</button>' +
+      '<div class="mitra-stage"></div>' +
+      '<button class="mitra-arrow" id="mitra-next">›</button>' +
+    '</div><div class="mitra-count" style="text-align:center;font-size:.7rem;color:#6B7688;margin-top:4px;"></div>';
+  paint();
+  host.querySelector("#mitra-prev").addEventListener("click", () => { MITRA_IDX = (MITRA_IDX - 1 + mitra.length) % mitra.length; paint(); });
+  host.querySelector("#mitra-next").addEventListener("click", () => { MITRA_IDX = (MITRA_IDX + 1) % mitra.length; paint(); });
+  if (mitra.length > 1) MITRA_TIMER = setInterval(() => { MITRA_IDX = (MITRA_IDX + 1) % mitra.length; paint(); }, 3000);
+  renderMitraTable(mitra);
+}
+function renderMitraTable(mitra) {
+  const thead = document.querySelector("#mitra-table thead");
+  const tbody = document.querySelector("#mitra-table tbody");
+  if (thead) thead.innerHTML = "<tr><th>No</th><th>Nama Mitra</th><th>Program</th><th>Logo</th></tr>";
+  if (!tbody) return;
+  if (!mitra.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Belum ada mitra.</td></tr>'; return; }
+  tbody.innerHTML = mitra.map((mt, i) =>
+    `<tr><td>${i + 1}</td><td>${mt.nama}</td><td>${mt.prog}</td><td>${mt.logo ? "✓" : "-"}</td></tr>`).join("");
 }
 
 function renderProgFlexTable(key) {
@@ -1710,6 +1742,9 @@ async function init() {
     $("fin-show-form").textContent = f.hidden ? "➕ Input Keuangan" : "✖ Tutup Form";
   });
   if ($("fin-simpan")) $("fin-simpan").addEventListener("click", simpanFinancial);
+  if ($("mitra-toggle")) $("mitra-toggle").addEventListener("click", () => {
+    const t = $("mitra-list"); if (t) t.hidden = !t.hidden;
+  });
   loadFlex();
   ["flt-program", "flt-bulan", "flt-kegiatan", "flt-level"].forEach((id) =>
     $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
