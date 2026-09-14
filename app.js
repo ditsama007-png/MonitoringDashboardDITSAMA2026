@@ -78,7 +78,7 @@ function programProgress(rows) {
   return scores.length ? Math.min(scores.reduce((a, b) => a + b, 0) / scores.length, 1) : 0;
 }
 
-function statusOf(p) {
+function progressStatus(p) {
   if (p >= 0.8) return ["On Track", "ok"];
   if (p >= 0.6) return ["Attention", "warn"];
   return ["Critical", "crit"];
@@ -291,16 +291,15 @@ function renderPortfolio(rows, progs) {
   if (!progs.length) { el.innerHTML = '<div class="empty">Belum ada data.</div>'; return; }
   progs.forEach((k) => {
     const pr = rows.filter((r) => r._prog === k);
-    const kegCount = pr.filter((r) => (r.kegiatan || "").trim()).length;
-    const msCount = pr.filter((r) => (r.jenis || "").trim()).length;
-    const total = kegCount + msCount;
+    const total = pr.filter((r) => (r.kegiatan || "").trim()).length;
+    const selesai = pr.filter((r) => (r.kegiatan || "").trim() && r.status === "Selesai").length;
     const prog = programProgress(pr);
-    const [stat, cls] = statusOf(prog);
+    const [stat, cls] = progressStatus(prog);
     const p = Math.round(prog * 100);
     el.insertAdjacentHTML("beforeend",
       `<div class="port">
         <div class="nm">${labelOf(k)}<small>Kegiatan selesai / total</small></div>
-        <div class="cnt">${kegCount} / ${total}</div>
+        <div class="cnt">${selesai} / ${total}</div>
         <div><div class="bar"><span style="width:${Math.min(p,100)}%"></span></div>
              <div class="pct">${p}%</div></div>
         <div class="badge ${cls}">${stat}</div>
@@ -740,11 +739,19 @@ function upcomingMilestones(key) {
   });
 }
 
-// status otomatis dari Mode + Tanggal
+// status otomatis dari TANGGAL (konsisten di tabel, KPI, portfolio):
+//  Upcoming  : hari ini < H-2
+//  On-Going  : H-2 <= hari ini <= H+7
+//  Selesai   : hari ini > H+7
 function statusOf(r) {
-  if (String(r["Mode"] || "") === "Upcoming Milestone") return "Upcoming";
   const t = r["Tanggal Kegiatan"];
-  if (t) { const d = new Date(t); if (!isNaN(d)) { const now = new Date(); now.setHours(0, 0, 0, 0); if (d < now) return "Selesai"; } }
+  if (!t) return String(r["Mode"] || "") === "Upcoming Milestone" ? "Upcoming" : "On-Going";
+  const d = new Date(t); if (isNaN(d)) return "On-Going";
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const from = new Date(d); from.setDate(from.getDate() - 2);
+  const to = new Date(d); to.setDate(to.getDate() + 7);
+  if (now < from) return "Upcoming";
+  if (now > to) return "Selesai";
   return "On-Going";
 }
 
