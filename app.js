@@ -120,6 +120,7 @@ function render() {
   renderPivot(rows);
   renderDetail(rows);
   renderCalendar(rows);
+  renderDashGantt();
   renderPeserta();
 }
 
@@ -1114,16 +1115,10 @@ function fmtTanggal(v) {
 }
 
 // tabel program (read-only) dari DataMasuk
-// ===== Timeline Gantt per fase (halaman program) =====
-function renderGantt(key) {
-  const host = $("prog-gantt"); if (!host) return;
-  const label = labelOf(key);
-  const flex = FLEX_CACHE || { rows: [] };
-  const items = flex.rows.filter((r) => { const p = String(r["Program"] || ""); return p === key || p === label; })
-    .map((r) => ({ d: new Date(r["Tanggal Kegiatan"]), fase: String(r["Fase Kegiatan"] || "").trim() }))
-    .filter((x) => x.fase && !isNaN(x.d));
+// ===== Timeline Gantt per fase =====
+function drawGantt(host, items) {
+  if (!host) return;
   if (!items.length) { host.innerHTML = '<div class="empty">Belum ada data fase.</div>'; return; }
-
   const byFase = {};
   items.forEach((x) => {
     const f = x.fase;
@@ -1132,16 +1127,13 @@ function renderGantt(key) {
     if (x.d > byFase[f].max) byFase[f].max = x.d;
     byFase[f].count++;
   });
-  const fases = Object.keys(byFase);
   let gMin = items[0].d, gMax = items[0].d;
   items.forEach((x) => { if (x.d < gMin) gMin = x.d; if (x.d > gMax) gMax = x.d; });
   const span = Math.max((gMax - gMin) / 86400000, 1);
-
   const warna = { "persiapan": "#2F6FB0", "pelaksanaan": "#16A34A", "pelaporan": "#F59E0B", "proses": "#8B5CF6", "evaluasi": "#DC2626" };
   const fmt = (d) => String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0");
-
   let html = '<div class="gantt">';
-  fases.sort((a, b) => byFase[a].min - byFase[b].min).forEach((f) => {
+  Object.keys(byFase).sort((a, b) => byFase[a].min - byFase[b].min).forEach((f) => {
     const o = byFase[f];
     const left = ((o.min - gMin) / 86400000) / span * 100;
     const width = Math.max(((o.max - o.min) / 86400000 + 1) / span * 100, 2);
@@ -1152,6 +1144,26 @@ function renderGantt(key) {
   });
   html += '<div class="gantt-axis"><span>' + fmt(gMin) + '</span><span>' + fmt(gMax) + '</span></div></div>';
   host.innerHTML = html;
+}
+function ganttItems(rawRows) {
+  return rawRows.map((r) => ({ d: new Date(r["Tanggal Kegiatan"]), fase: String(r["Fase Kegiatan"] || "").trim() }))
+    .filter((x) => x.fase && !isNaN(x.d));
+}
+function renderGantt(key) {
+  const label = labelOf(key);
+  const flex = FLEX_CACHE || { rows: [] };
+  const raw = flex.rows.filter((r) => { const p = String(r["Program"] || ""); return p === key || p === label; });
+  drawGantt($("prog-gantt"), ganttItems(raw));
+}
+// versi dashboard utama (ikut filter Program & Bulan)
+function renderDashGantt() {
+  const flex = FLEX_CACHE || { rows: [] };
+  const fpLabel = selValue($("flt-program")), fb = selValue($("flt-bulan"));
+  const fp = filterProgramToKey(fpLabel);
+  let raw = flex.rows.slice();
+  if (fp && fp !== "Semua") raw = raw.filter((r) => keyFromStored(r["Program"]) === fp);
+  if (fb && fb !== "Semua") raw = raw.filter((r) => monthLabel(r["Tanggal Kegiatan"]) === fb);
+  drawGantt($("dash-gantt"), ganttItems(raw));
 }
 
 function renderProgFlexTable(key) {
