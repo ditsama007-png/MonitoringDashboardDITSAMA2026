@@ -778,10 +778,12 @@ function applyAccess() {
 function showView(view) {
   const isDash = view === "dashboard";
   const isInput = view === "input";
-  const isProgram = !isDash && !isInput;
+  const isFinancial = view === "financial";
+  const isProgram = !isDash && !isInput && !isFinancial;
 
   $("view-dash").hidden = !isDash;
   $("view-input").hidden = !isInput;
+  $("view-financial").hidden = !isFinancial;
   $("view-program").hidden = !isProgram;
 
   // Control (filter) & judul hanya di dashboard utama
@@ -794,13 +796,15 @@ function showView(view) {
   } else if (isInput) {
     populateInputPrograms();
     renderInput($("in-program").value);
+  } else if (isFinancial) {
+    renderFinancial();
   } else {
-    // dashboard per program (lihat saja)
+    // dashboard per program (lihat saja) — data dari DataMasuk
     const p = programByKey(view);
     $("prog-title").textContent = "Dashboard Program · " + (p ? p.label : view);
     renderProgramDash(view);
     renderProgramMilestones(view);
-    renderTableFor(view, "prog-table");
+    renderProgFlexTable(view);
   }
 }
 
@@ -873,7 +877,9 @@ function renderFlexTable(key) {
     header.forEach((h) => {
       const td = document.createElement("td");
       td.dataset.col = h;
-      td.textContent = (r[h] !== undefined && r[h] !== null) ? r[h] : "";
+      let v = (r[h] !== undefined && r[h] !== null) ? r[h] : "";
+      if (h === "Tanggal Kegiatan") v = fmtTanggal(v);
+      td.textContent = v;
       tr.appendChild(td);
     });
     const act = document.createElement("td"); act.className = "act-cell"; act.style.whiteSpace = "nowrap";
@@ -896,6 +902,81 @@ function renderFlexTable(key) {
 }
 
 function milestoneNeedsDate(r) { return String(r["Mode"] || "") === "Upcoming Milestone"; }
+
+// format tanggal -> dd/mm/yyyy
+function fmtTanggal(v) {
+  if (!v) return "";
+  const d = new Date(v);
+  if (isNaN(d)) return v;
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return dd + "/" + mm + "/" + d.getFullYear();
+}
+
+// tabel program (read-only) dari DataMasuk
+function renderProgFlexTable(key) {
+  const label = labelOf(key);
+  const thead = document.querySelector("#prog-table thead");
+  const tbody = document.querySelector("#prog-table tbody");
+  if (!thead || !tbody) return;
+  const flex = FLEX_CACHE || { header: [], rows: [] };
+  const header = (flex.header.length ? flex.header : ["ID", "Waktu Input", "Program", "PIC"]);
+  const rows = flex.rows.filter((r) => { const p = String(r["Program"] || ""); return p === key || p === label; });
+  thead.innerHTML = "<tr><th>Status</th>" + header.map((h) => `<th>${h}</th>`).join("") + "</tr>";
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${header.length + 1}" class="empty">Belum ada data untuk ${label}.</td></tr>`; return; }
+  tbody.innerHTML = rows.map((r) => {
+    const st = statusOf(r);
+    return '<tr><td><span class="status-badge st-' + st.toLowerCase().replace(/[^a-z]/g, "") + '">' + st + "</span></td>" +
+      header.map((h) => {
+        let v = (r[h] !== undefined && r[h] !== null) ? r[h] : "";
+        if (h === "Tanggal Kegiatan") v = fmtTanggal(v);
+        return "<td>" + v + "</td>";
+      }).join("") + "</tr>";
+  }).join("");
+}
+
+// Financial: rekap anggaran/realisasi dari DataMasuk (kolom yang mengandung 'Anggaran'/'Realisasi')
+function renderFinancial() {
+  const flex = FLEX_CACHE || { header: [], rows: [] };
+  const angCols = flex.header.filter((h) => /anggaran/i.test(h));
+  const realCols = flex.header.filter((h) => /realisasi/i.test(h));
+  const perProg = {};
+  flex.rows.forEach((r) => {
+    const prog = labelFromStored(r["Program"]);
+    perProg[prog] = perProg[prog] || { ang: 0, real: 0 };
+    angCols.forEach((c) => { perProg[prog].ang += num(r[c]); });
+    realCols.forEach((c) => { perProg[prog].real += num(r[c]); });
+  });
+  let totA = 0, totR = 0;
+  Object.keys(perProg).forEach((p) => { totA += perProg[p].ang; totR += perProg[p].real; });
+  if ($("fin-anggaran")) $("fin-anggaran").textContent = fmtRupiah(totA);
+  if ($("fin-realisasi")) $("fin-realisasi").textContent = fmtRupiah(totR);
+  if ($("fin-sisa")) $("fin-sisa").textContent = fmtRupiah(totA - totR);
+  if ($("fin-serap")) $("fin-serap").textContent = totA > 0 ? Math.round(totR / totA * 100) + "%" : "0%";
+
+  const thead = document.querySelector("#fin-table thead");
+  const tbody = document.querySelector("#fin-table tbody");
+  if (thead) thead.innerHTML = "<tr><th>Program</th><th>Anggaran</th><th>Realisasi</th><th>Sisa</th><th>% Serapan</th></tr>";
+  const keys = Object.keys(perProg);
+  if (tbody) {
+    if (!keys.length || (angCols.length === 0 && realCols.length === 0)) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">Belum ada data keuangan. Tambahkan kolom bernama "Anggaran"/"Realisasi" saat input, atau tunggu modul finance berikutnya.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = keys.map((p) => {
+      const a = perProg[p].ang, rl = perProg[p].real;
+      const s = totA >= 0 ? (a - rl) : 0;
+      const serap = a > 0 ? Math.round(rl / a * 100) + "%" : "0%";
+      return `<tr><td>${p}</td><td>${fmtRupiah(a)}</td><td>${fmtRupiah(rl)}</td><td>${fmtRupiah(s)}</td><td>${serap}</td></tr>`;
+    }).join("");
+  }
+}
+function num(v) { const n = parseFloat(String(v).replace(/[^0-9.-]/g, "")); return isNaN(n) ? 0 : n; }
+function labelFromStored(p) {
+  p = String(p || "");
+  const byKey = PROGRAMS.find((x) => x.key === p);
+  return byKey ? byKey.label : p;
+}
 function milestoneActive(r) {
   const t = r["Tanggal Kegiatan"];
   if (!t) return true;                       // belum ada tanggal -> boleh diisi
