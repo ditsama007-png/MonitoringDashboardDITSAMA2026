@@ -90,7 +90,7 @@ tbody tr:nth-child(even){background:#F8FAFD}
 
 /* banner + kpi + cards */
 .banner{background:#EAF1FB;border:1px solid #C7D9F0;color:#274B86;border-radius:10px;padding:.6rem .9rem;font-size:.85rem;margin-bottom:1rem}
-.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:.8rem;margin-bottom:1rem}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem;margin-bottom:1rem}
 .kpi{background:#fff;border:2px solid var(--blue);border-radius:18px;padding:.9rem;text-align:center}
 .kpi-val{font-size:1.6rem;font-weight:800;color:var(--navy)}
 .kpi-lab{font-size:.75rem;color:var(--muted);margin-top:.2rem}
@@ -288,3 +288,6 @@ tbody tr:nth-child(even){background:#F8FAFD}
   box-shadow:-3px 0 6px rgba(0,0,0,.08)}
 #flex-table td:last-child{background:#fff}
 #flex-table th:last-child{background:#1B3A6B}
+
+/* beri jarak control dari tepi kiri saat menu utama (rail) disembunyikan */
+.app:has(.rail.hide) .control{ margin-left:8px; border-radius:14px; }
