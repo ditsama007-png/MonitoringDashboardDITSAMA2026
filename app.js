@@ -993,6 +993,7 @@ function showView(view) {
     renderProgramDash(view);
     renderProgramMilestones(view);
     renderGantt(view);
+    renderMitra(view);
     renderProgFlexTable(view);
   }
 }
@@ -1155,15 +1156,97 @@ function renderGantt(key) {
   const raw = flex.rows.filter((r) => { const p = String(r["Program"] || ""); return p === key || p === label; });
   drawGantt($("prog-gantt"), ganttItems(raw));
 }
-// versi dashboard utama (ikut filter Program & Bulan)
+
+// palet warna per program (indeks stabil sesuai urutan PROGRAMS)
+const PROG_COLORS = ["#2F6FB0", "#16A34A", "#F59E0B", "#8B5CF6", "#DC2626", "#0EA5E9", "#DB2777", "#65A30D", "#9333EA"];
+function progColor(key) {
+  const i = PROGRAMS.findIndex((p) => p.key === key);
+  return PROG_COLORS[(i < 0 ? 0 : i) % PROG_COLORS.length];
+}
+
+// versi dashboard utama: timeline fase PER PROGRAM (warna beda) + legenda
 function renderDashGantt() {
+  const host = $("dash-gantt"); if (!host) return;
   const flex = FLEX_CACHE || { rows: [] };
   const fpLabel = selValue($("flt-program")), fb = selValue($("flt-bulan"));
   const fp = filterProgramToKey(fpLabel);
   let raw = flex.rows.slice();
   if (fp && fp !== "Semua") raw = raw.filter((r) => keyFromStored(r["Program"]) === fp);
   if (fb && fb !== "Semua") raw = raw.filter((r) => monthLabel(r["Tanggal Kegiatan"]) === fb);
-  drawGantt($("dash-gantt"), ganttItems(raw));
+
+  // kumpulkan (program, fase, tanggal)
+  const data = raw.map((r) => ({ prog: keyFromStored(r["Program"]), d: new Date(r["Tanggal Kegiatan"]), fase: String(r["Fase Kegiatan"] || "").trim() }))
+    .filter((x) => x.fase && !isNaN(x.d));
+  if (!data.length) { host.innerHTML = '<div class="empty">Belum ada data fase.</div>'; return; }
+
+  // batas waktu global
+  let gMin = data[0].d, gMax = data[0].d;
+  data.forEach((x) => { if (x.d < gMin) gMin = x.d; if (x.d > gMax) gMax = x.d; });
+  const span = Math.max((gMax - gMin) / 86400000, 1);
+  const fmt = (d) => String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0");
+
+  // group per program -> per fase (rentang)
+  const progs = [...new Set(data.map((x) => x.prog))];
+  let html = '<div class="gantt">';
+  progs.forEach((pk) => {
+    const rowsP = data.filter((x) => x.prog === pk);
+    const byFase = {};
+    rowsP.forEach((x) => {
+      if (!byFase[x.fase]) byFase[x.fase] = { min: x.d, max: x.d, count: 0 };
+      if (x.d < byFase[x.fase].min) byFase[x.fase].min = x.d;
+      if (x.d > byFase[x.fase].max) byFase[x.fase].max = x.d;
+      byFase[x.fase].count++;
+    });
+    const c = progColor(pk);
+    Object.keys(byFase).sort((a, b) => byFase[a].min - byFase[b].min).forEach((f) => {
+      const o = byFase[f];
+      const left = ((o.min - gMin) / 86400000) / span * 100;
+      const width = Math.max(((o.max - o.min) / 86400000 + 1) / span * 100, 2);
+      html += '<div class="gantt-row"><div class="gantt-lab">' + labelOf(pk) + ' · ' + f + '</div>' +
+        '<div class="gantt-track"><div class="gantt-bar" style="left:' + left + '%;width:' + width + '%;background:' + c + ';" title="' + labelOf(pk) + ' - ' + f + ': ' + fmt(o.min) + '–' + fmt(o.max) + '">' +
+        '<span>' + fmt(o.min) + '–' + fmt(o.max) + '</span></div></div></div>';
+    });
+  });
+  html += '<div class="gantt-axis"><span>' + fmt(gMin) + '</span><span>' + fmt(gMax) + '</span></div></div>';
+  // legenda program
+  html += '<div class="gantt-legend">' + progs.map((pk) =>
+    '<span><i style="background:' + progColor(pk) + '"></i>' + labelOf(pk) + '</span>').join("") + '</div>';
+  host.innerHTML = html;
+}
+
+// ubah link Google Drive jadi URL gambar thumbnail
+function driveThumb(url) {
+  if (!url) return "";
+  const m = String(url).match(/[-\w]{25,}/);
+  return m ? ("https://drive.google.com/thumbnail?id=" + m[0] + "&sz=w400") : "";
+}
+// showcase Mitra: logo + nama (dari kolom SDM Mitra + SK Mitra)
+function renderMitra(key) {
+  const host = $("prog-mitra"); if (!host) return;
+  const label = labelOf(key);
+  const flex = FLEX_CACHE || { rows: [] };
+  const rows = flex.rows.filter((r) => { const p = String(r["Program"] || ""); return p === key || p === label; });
+  const mitra = [];
+  rows.forEach((r) => {
+    Object.keys(r).forEach((k) => {
+      const m = /^SDM Mitra - Nama \d+$/.exec(k);
+      if (m && String(r[k] || "").trim()) {
+        const nama = String(r[k]).trim();
+        const logo = driveThumb(r["SK Mitra (" + nama + ")"] || "");
+        if (!mitra.some((x) => x.nama === nama)) mitra.push({ nama, logo });
+      }
+    });
+  });
+  if (!mitra.length) { host.innerHTML = '<div class="empty">Belum ada data mitra.</div>'; return; }
+  host.innerHTML = '<div class="mitra-grid">' + mitra.map((mt) => {
+    const img = mt.logo
+      ? '<img src="' + mt.logo + '" alt="' + mt.nama + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+      : "";
+    const initials = mt.nama.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+    return '<div class="mitra-card">' + img +
+      '<div class="mitra-ph"' + (mt.logo ? ' style="display:none;"' : "") + '>' + initials + '</div>' +
+      '<div class="mitra-nm">' + mt.nama + '</div></div>';
+  }).join("") + "</div>";
 }
 
 function renderProgFlexTable(key) {
