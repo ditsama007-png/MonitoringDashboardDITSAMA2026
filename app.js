@@ -108,8 +108,7 @@ function render() {
 
   if ($("kpi-progress")) $("kpi-progress").textContent = pct(overall);
   if ($("kpi-keg")) $("kpi-keg").textContent = rows.filter((r) => (r.kegiatan || "").trim()).length;
-  if ($("kpi-hadir")) $("kpi-hadir").textContent = totHadir.toLocaleString("id-ID");
-  if ($("kpi-rate")) $("kpi-rate").textContent = totDaftar > 0 ? Math.round(totHadir / totDaftar * 100) + "%" : "0%";
+  if ($("kpi-selesai")) $("kpi-selesai").textContent = rows.filter((r) => r.status === "Selesai").length;
 
   renderPortfolio(rows, shownProgs);
   renderIssues(rows);
@@ -163,6 +162,7 @@ function flexToStd(r) {
     level: iss.level,
     ketisu: iss.name || r["Keterangan Isu"] || "",
     jenis: String(r["Mode"] || "") === "Upcoming Milestone" ? (r["Nama Kegiatan"] || "Milestone") : "",
+    status: statusOf(r),
   };
 }
 function flexRowsFiltered() {
@@ -425,6 +425,25 @@ function renderPeserta() {
       const pct = t > 0 ? Math.round(h / t * 100) + "%" : "0%";
       return `<tr><td>${c}</td><td>${t}</td><td>${h}</td><td>${pct}</td></tr>`;
     }).join("");
+  }
+
+  // ---- SDM terlibat per peran (jumlah) ----
+  const sdmSet = {};
+  header.forEach((h) => { const m = /^SDM (.+) \(jumlah\)$/.exec(h); if (m) sdmSet[m[1]] = 1; });
+  const sdmPeran = Object.keys(sdmSet);
+  const perSDM = {}; sdmPeran.forEach((p) => perSDM[p] = 0);
+  rows.forEach((r) => { sdmPeran.forEach((p) => { perSDM[p] += num(r["SDM " + p + " (jumlah)"]); }); });
+  const sthead = document.querySelector("#peserta-sdm thead");
+  const stbody = document.querySelector("#peserta-sdm tbody");
+  if (sthead) sthead.innerHTML = "<tr><th>Peran SDM</th><th>Jumlah Terlibat</th></tr>";
+  if (stbody) {
+    const filled = sdmPeran.filter((p) => perSDM[p] > 0);
+    if (!filled.length) { stbody.innerHTML = '<tr><td colspan="2" class="empty">Belum ada data SDM.</td></tr>'; }
+    else {
+      let tot = 0; filled.forEach((p) => tot += perSDM[p]);
+      stbody.innerHTML = filled.map((p) => `<tr><td>${p}</td><td>${perSDM[p]}</td></tr>`).join("") +
+        `<tr><td><b>Total SDM</b></td><td><b>${tot}</b></td></tr>`;
+    }
   }
 }
 function monthKey(v) {
