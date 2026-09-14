@@ -1017,7 +1017,7 @@ function renderFlexTable(key) {
   const tbody = document.querySelector("#flex-table tbody");
   if (!thead || !tbody) return;
   const flex = FLEX_CACHE || { header: [], rows: [] };
-  const header = (flex.header.length ? flex.header : ["ID", "Waktu Input", "Program", "PIC"]);
+  const header = (flex.header.length ? flex.header : ["ID", "Waktu Input", "Program", "PIC"]).filter((h) => h !== "Mode");
   // tampilkan semua data untuk program terpilih (cocokkan kode ATAU label)
   const rows = flex.rows.filter((r) => {
     const p = String(r["Program"] || "");
@@ -1082,7 +1082,7 @@ function renderProgFlexTable(key) {
   const tbody = document.querySelector("#prog-table tbody");
   if (!thead || !tbody) return;
   const flex = FLEX_CACHE || { header: [], rows: [] };
-  const header = (flex.header.length ? flex.header : ["ID", "Waktu Input", "Program", "PIC"]);
+  const header = (flex.header.length ? flex.header : ["ID", "Waktu Input", "Program", "PIC"]).filter((h) => h !== "Mode");
   const rows = flex.rows.filter((r) => { const p = String(r["Program"] || ""); return p === key || p === label; });
   thead.innerHTML = "<tr><th>Status</th>" + header.map((h) => `<th>${h}</th>`).join("") + "</tr>";
   if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${header.length + 1}" class="empty">Belum ada data untuk ${label}.</td></tr>`; return; }
