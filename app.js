@@ -134,19 +134,27 @@ function sumColsMatch(r, re) {
 }
 function primaryIssue(r) {
   const rank = { High: 3, Medium: 2, Low: 1 };
-  let best = "", bestName = "";
+  let best = "", bestName = "", bestPihak = "", bestSolve = "";
   Object.keys(r).forEach((k) => {
     const m = /^Issue \d+ Level$/.exec(k) || (k === "Level Isu" ? [k] : null);
     if (m) {
       const lv = String(r[k] || "");
       if (rank[lv] && (!best || rank[lv] > rank[best])) {
         best = lv;
-        const nk = k === "Level Isu" ? "Keterangan Isu" : k.replace("Level", "Nama");
-        bestName = r[nk] || "";
+        if (k === "Level Isu") {
+          bestName = r["Keterangan Isu"] || "";
+          bestPihak = r["Issue dengan pihak"] || "";
+          bestSolve = r["Penanganan"] || "";
+        } else {
+          const base = k.replace(" Level", "");
+          bestName = r[k.replace("Level", "Nama")] || "";
+          bestPihak = r[base + " Pihak (penyelenggara)"] || "";
+          bestSolve = r[base + " Problem Solving"] || "";
+        }
       }
     }
   });
-  return { level: best, name: bestName };
+  return { level: best, name: bestName, pihak: bestPihak, solve: bestSolve };
 }
 function flexToStd(r) {
   const iss = primaryIssue(r);
@@ -165,6 +173,9 @@ function flexToStd(r) {
     keberjalanan: r["Keberjalanan Kegiatan"] || "",
     level: iss.level,
     ketisu: iss.name || r["Keterangan Isu"] || "",
+    issuePihak: iss.pihak || "",
+    issueSolve: iss.solve || "",
+    pic: r["PIC"] || "",
     jenis: String(r["Mode"] || "") === "Upcoming Milestone" ? (r["Nama Kegiatan"] || "Milestone") : "",
     status: statusOf(r),
   };
@@ -461,12 +472,23 @@ function renderIssues(rows) {
     .sort((a, b) => order[a.level] - order[b.level]);
   const el = $("issues-list"); el.innerHTML = "";
   if (!items.length) { el.innerHTML = '<div class="empty">Tidak ada issue. 🎉</div>'; return; }
-  items.slice(0, 8).forEach((r) => {
-    el.insertAdjacentHTML("beforeend",
+  items.slice(0, 8).forEach((r, i) => {
+    const wrap = document.createElement("div");
+    wrap.innerHTML =
       `<div class="issue ${r.level.toLowerCase()}">
         <div class="t">${r.ketisu || r.kegiatan || "-"}<small>${labelOf(r._prog)}</small></div>
+        <button class="mini-btn issue-detail" type="button">Detail</button>
         <div class="lv">${r.level}</div>
-      </div>`);
+      </div>
+      <div class="issue-info" hidden>
+        <div><b>PIC:</b> ${r.pic || "-"}</div>
+        <div><b>Keterangan Issue:</b> ${r.ketisu || "-"}</div>
+        <div><b>Issue dengan pihak (penyelenggara):</b> ${r.issuePihak || "-"}</div>
+        <div><b>Problem Solving:</b> ${r.issueSolve || "-"}</div>
+      </div>`;
+    const info = wrap.querySelector(".issue-info");
+    wrap.querySelector(".issue-detail").addEventListener("click", () => { info.hidden = !info.hidden; });
+    el.appendChild(wrap);
   });
 }
 
@@ -969,6 +991,7 @@ function showView(view) {
     $("prog-title").textContent = "Dashboard Program · " + (p ? p.label : view);
     renderProgramDash(view);
     renderProgramMilestones(view);
+    renderGantt(view);
     renderProgFlexTable(view);
   }
 }
@@ -1091,6 +1114,46 @@ function fmtTanggal(v) {
 }
 
 // tabel program (read-only) dari DataMasuk
+// ===== Timeline Gantt per fase (halaman program) =====
+function renderGantt(key) {
+  const host = $("prog-gantt"); if (!host) return;
+  const label = labelOf(key);
+  const flex = FLEX_CACHE || { rows: [] };
+  const items = flex.rows.filter((r) => { const p = String(r["Program"] || ""); return p === key || p === label; })
+    .map((r) => ({ d: new Date(r["Tanggal Kegiatan"]), fase: String(r["Fase Kegiatan"] || "").trim() }))
+    .filter((x) => x.fase && !isNaN(x.d));
+  if (!items.length) { host.innerHTML = '<div class="empty">Belum ada data fase.</div>'; return; }
+
+  const byFase = {};
+  items.forEach((x) => {
+    const f = x.fase;
+    if (!byFase[f]) byFase[f] = { min: x.d, max: x.d, count: 0 };
+    if (x.d < byFase[f].min) byFase[f].min = x.d;
+    if (x.d > byFase[f].max) byFase[f].max = x.d;
+    byFase[f].count++;
+  });
+  const fases = Object.keys(byFase);
+  let gMin = items[0].d, gMax = items[0].d;
+  items.forEach((x) => { if (x.d < gMin) gMin = x.d; if (x.d > gMax) gMax = x.d; });
+  const span = Math.max((gMax - gMin) / 86400000, 1);
+
+  const warna = { "persiapan": "#2F6FB0", "pelaksanaan": "#16A34A", "pelaporan": "#F59E0B", "proses": "#8B5CF6", "evaluasi": "#DC2626" };
+  const fmt = (d) => String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0");
+
+  let html = '<div class="gantt">';
+  fases.sort((a, b) => byFase[a].min - byFase[b].min).forEach((f) => {
+    const o = byFase[f];
+    const left = ((o.min - gMin) / 86400000) / span * 100;
+    const width = Math.max(((o.max - o.min) / 86400000 + 1) / span * 100, 2);
+    const c = warna[f.toLowerCase()] || "#64748B";
+    html += '<div class="gantt-row"><div class="gantt-lab">' + f + '</div>' +
+      '<div class="gantt-track"><div class="gantt-bar" style="left:' + left + '%;width:' + width + '%;background:' + c + ';" title="' + f + ': ' + fmt(o.min) + '–' + fmt(o.max) + '">' +
+      '<span>' + fmt(o.min) + '–' + fmt(o.max) + ' · ' + o.count + ' hari</span></div></div></div>';
+  });
+  html += '<div class="gantt-axis"><span>' + fmt(gMin) + '</span><span>' + fmt(gMax) + '</span></div></div>';
+  host.innerHTML = html;
+}
+
 function renderProgFlexTable(key) {
   const label = labelOf(key);
   const thead = document.querySelector("#prog-table thead");
