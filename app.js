@@ -108,6 +108,8 @@ function render() {
 
   if ($("kpi-progress")) $("kpi-progress").textContent = pct(overall);
   if ($("kpi-keg")) $("kpi-keg").textContent = rows.filter((r) => (r.kegiatan || "").trim()).length;
+  if ($("kpi-upcoming")) $("kpi-upcoming").textContent = rows.filter((r) => r.status === "Upcoming").length;
+  if ($("kpi-ongoing")) $("kpi-ongoing").textContent = rows.filter((r) => r.status === "On-Going").length;
   if ($("kpi-selesai")) $("kpi-selesai").textContent = rows.filter((r) => r.status === "Selesai").length;
 
   renderPortfolio(rows, shownProgs);
@@ -988,6 +990,17 @@ function renderInput(key) {
   renderFlexTable(key);
 }
 
+let FIN_CACHE = null;
+async function loadFin() {
+  if (!API_URL) { FIN_CACHE = FIN_CACHE || { rows: [] }; return; }
+  try {
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "read_fin" }) });
+    const out = await res.json();
+    if (out.ok) FIN_CACHE = { rows: out.rows || [] };
+  } catch (e) { console.error("read_fin gagal:", e); }
+}
+
 async function loadFlex() {
   if (!API_URL) { FLEX_CACHE = FLEX_CACHE || { header: [], rows: [] }; buildColHistory(); return; }
   try {
@@ -1099,15 +1112,13 @@ function renderProgFlexTable(key) {
 
 // Financial: rekap anggaran/realisasi dari DataMasuk (kolom yang mengandung 'Anggaran'/'Realisasi')
 function renderFinancial() {
-  const flex = FLEX_CACHE || { header: [], rows: [] };
-  const angCols = flex.header.filter((h) => /anggaran/i.test(h));
-  const realCols = flex.header.filter((h) => /realisasi/i.test(h));
+  const fin = FIN_CACHE || { rows: [] };
   const perProg = {};
-  flex.rows.forEach((r) => {
+  fin.rows.forEach((r) => {
     const prog = labelFromStored(r["Program"]);
     perProg[prog] = perProg[prog] || { ang: 0, real: 0 };
-    angCols.forEach((c) => { perProg[prog].ang += num(r[c]); });
-    realCols.forEach((c) => { perProg[prog].real += num(r[c]); });
+    perProg[prog].ang += num(r["Anggaran"]);
+    perProg[prog].real += num(r["Realisasi"]);
   });
   let totA = 0, totR = 0;
   Object.keys(perProg).forEach((p) => { totA += perProg[p].ang; totR += perProg[p].real; });
@@ -1116,22 +1127,48 @@ function renderFinancial() {
   if ($("fin-sisa")) $("fin-sisa").textContent = fmtRupiah(totA - totR);
   if ($("fin-serap")) $("fin-serap").textContent = totA > 0 ? Math.round(totR / totA * 100) + "%" : "0%";
 
+  // dropdown program di form (yang boleh diakses)
+  const sel = $("fin-program");
+  if (sel && !sel.options.length) {
+    const allowed = PROGRAMS.filter((p) => canAccessProgram(p.key));
+    sel.innerHTML = (allowed.length ? allowed : PROGRAMS).map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
+  }
+
   const thead = document.querySelector("#fin-table thead");
   const tbody = document.querySelector("#fin-table tbody");
   if (thead) thead.innerHTML = "<tr><th>Program</th><th>Anggaran</th><th>Realisasi</th><th>Sisa</th><th>% Serapan</th></tr>";
   const keys = Object.keys(perProg);
   if (tbody) {
-    if (!keys.length || (angCols.length === 0 && realCols.length === 0)) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">Belum ada data keuangan. Tambahkan kolom bernama "Anggaran"/"Realisasi" saat input, atau tunggu modul finance berikutnya.</td></tr>';
-      return;
-    }
+    if (!keys.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">Belum ada data keuangan. Klik "Input Keuangan" untuk menambah.</td></tr>'; return; }
     tbody.innerHTML = keys.map((p) => {
       const a = perProg[p].ang, rl = perProg[p].real;
-      const s = totA >= 0 ? (a - rl) : 0;
       const serap = a > 0 ? Math.round(rl / a * 100) + "%" : "0%";
-      return `<tr><td>${p}</td><td>${fmtRupiah(a)}</td><td>${fmtRupiah(rl)}</td><td>${fmtRupiah(s)}</td><td>${serap}</td></tr>`;
+      return `<tr><td>${p}</td><td>${fmtRupiah(a)}</td><td>${fmtRupiah(rl)}</td><td>${fmtRupiah(a - rl)}</td><td>${serap}</td></tr>`;
     }).join("");
   }
+}
+
+async function simpanFinancial() {
+  const msg = $("fin-msg"); msg.textContent = ""; msg.className = "save-msg";
+  if (!SESSION) { msg.textContent = "Belum login."; msg.classList.add("err"); return; }
+  const program = $("fin-program").value;
+  const record = {
+    Program: program, Kategori: $("fin-kategori").value.trim(), Uraian: $("fin-uraian").value.trim(),
+    Anggaran: $("fin-in-anggaran").value, Realisasi: $("fin-in-realisasi").value, Keterangan: $("fin-ket").value.trim(),
+  };
+  if (!record.Anggaran && !record.Realisasi) { msg.textContent = "Isi Anggaran/Realisasi."; msg.classList.add("err"); return; }
+  if (!API_URL) { msg.textContent = "Mode contoh — belum ke Sheets."; msg.classList.add("ok"); return; }
+  msg.textContent = "Menyimpan...";
+  try {
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "write_fin", token: SESSION.token, program: program, record: record }) });
+    const out = await res.json();
+    if (out.ok) {
+      msg.textContent = "✅ Tersimpan ke sheet Financial."; msg.classList.add("ok");
+      ["fin-kategori", "fin-uraian", "fin-ket", "fin-in-anggaran", "fin-in-realisasi"].forEach((id) => { if ($(id)) $(id).value = ""; });
+      await loadFin(); renderFinancial();
+    } else { msg.textContent = "❌ " + (out.error || "Gagal."); msg.classList.add("err"); }
+  } catch (e) { msg.textContent = "❌ Gagal terhubung."; msg.classList.add("err"); }
 }
 function num(v) { const n = parseFloat(String(v).replace(/[^0-9.-]/g, "")); return isNaN(n) ? 0 : n; }
 function labelFromStored(p) {
@@ -1238,14 +1275,28 @@ function getExtraCols() {
 
 // KPI mini-dashboard khusus satu program
 function renderProgramDash(key) {
-  const rows = (DATA[key] || []).map((r) => ({ ...r, _prog: key }));
-  let ang = 0, real = 0, act = 0;
-  rows.forEach((r) => { ang += +r.anggaran || 0; real += +r.realisasi || 0; act += +r.actual || 0; });
+  const label = labelOf(key);
+  const flex = FLEX_CACHE || { rows: [] };
+  const rows = flex.rows.filter((r) => { const p = String(r["Program"] || ""); return p === key || p === label; }).map(flexToStd);
   const prog = Math.round(programProgress(rows) * 100);
+  // anggaran/realisasi dari sheet Financial
+  const fin = finForProgram(key);
   if ($("pk-progress")) $("pk-progress").textContent = prog + "%";
-  if ($("pk-anggaran")) $("pk-anggaran").textContent = fmtRupiah(ang);
-  if ($("pk-realisasi")) $("pk-realisasi").textContent = fmtRupiah(real);
-  if ($("pk-peserta")) $("pk-peserta").textContent = act.toLocaleString("id-ID");
+  if ($("pk-upcoming")) $("pk-upcoming").textContent = rows.filter((r) => r.status === "Upcoming").length;
+  if ($("pk-ongoing")) $("pk-ongoing").textContent = rows.filter((r) => r.status === "On-Going").length;
+  if ($("pk-selesai")) $("pk-selesai").textContent = rows.filter((r) => r.status === "Selesai").length;
+  if ($("pk-anggaran")) $("pk-anggaran").textContent = fmtRupiah(fin.ang);
+  if ($("pk-realisasi")) $("pk-realisasi").textContent = fmtRupiah(fin.ang - fin.real);
+}
+function finForProgram(key) {
+  const label = labelOf(key);
+  const fin = FIN_CACHE || { rows: [] };
+  let ang = 0, real = 0;
+  fin.rows.forEach((r) => {
+    const p = String(r["Program"] || "");
+    if (p === key || p === label) { ang += num(r["Anggaran"]); real += num(r["Realisasi"]); }
+  });
+  return { ang: ang, real: real };
 }
 
 // -------------------------------------------------------- AUTH -------------
@@ -1464,6 +1515,7 @@ async function init() {
   // --- muat data (DataMasuk utama untuk dashboard) ---
   try {
     await loadFlex();          // data utama dari DataMasuk
+    await loadFin();           // data keuangan dari sheet Financial
     await loadData();          // data lama (_2026) untuk cadangan/kalender bila ada
     rebuildFilters();
     render();
@@ -1479,6 +1531,11 @@ async function init() {
     const b = $("btn-refresh-flex"); const t = b.textContent; b.textContent = "⏳ Memuat...";
     await loadFlex(); renderFlexTable($("in-program").value); b.textContent = t;
   });
+  if ($("fin-show-form")) $("fin-show-form").addEventListener("click", () => {
+    const f = $("fin-form"); f.hidden = !f.hidden;
+    $("fin-show-form").textContent = f.hidden ? "➕ Input Keuangan" : "✖ Tutup Form";
+  });
+  if ($("fin-simpan")) $("fin-simpan").addEventListener("click", simpanFinancial);
   loadFlex();
   ["flt-program", "flt-bulan", "flt-kegiatan", "flt-level"].forEach((id) =>
     $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
