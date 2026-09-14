@@ -110,6 +110,8 @@ function doPost(e) {
     if (body.action === "delete_flex") return handleDeleteFlex_(body);
     if (body.action === "update_flex") return handleUpdateFlex_(body);
     if (body.action === "upload_sk")  return handleUploadSK_(body);
+    if (body.action === "write_fin")  return handleWriteFin_(body);
+    if (body.action === "read_fin")   return handleReadFin_(body);
     if (body.action !== "write")  return json_({ ok: false, error: "aksi tidak dikenal" });
 
     // --- write: verifikasi token login ---
@@ -470,6 +472,45 @@ function handleUploadSK_(b) {
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
+}
+
+// ---- Financial: sheet "Financial" ----
+var FIN_SHEET = "Financial";
+var FIN_HEAD = ["Waktu Input", "Program", "PIC", "Kategori", "Uraian", "Anggaran", "Realisasi", "Keterangan"];
+function finSheet_(ss) {
+  var sh = ss.getSheetByName(FIN_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(FIN_SHEET);
+    sh.getRange(1, 1, 1, FIN_HEAD.length).setValues([FIN_HEAD])
+      .setFontWeight("bold").setBackground("#1B3A6B").setFontColor("#FFFFFF");
+  }
+  return sh;
+}
+function handleWriteFin_(b) {
+  var user = getUserByToken_(b.token);
+  if (!user) return json_({ ok: false, error: "Sesi tidak valid." });
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sh = finSheet_(ss);
+  var r = b.record || {};
+  sh.appendRow([
+    Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm"),
+    b.program || r.Program || "", user.nama || "",
+    r.Kategori || "", r.Uraian || "",
+    Number(r.Anggaran) || 0, Number(r.Realisasi) || 0, r.Keterangan || "",
+  ]);
+  return json_({ ok: true });
+}
+function handleReadFin_(b) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sh = ss.getSheetByName(FIN_SHEET);
+  if (!sh) return json_({ ok: true, rows: [] });
+  var last = sh.getLastRow();
+  if (last < 2) return json_({ ok: true, rows: [] });
+  var data = sh.getRange(2, 1, last - 1, FIN_HEAD.length).getValues();
+  var rows = data.map(function (d) {
+    var o = {}; FIN_HEAD.forEach(function (h, i) { o[h] = d[i]; }); return o;
+  });
+  return json_({ ok: true, rows: rows });
 }
 
 function json_(obj) {
