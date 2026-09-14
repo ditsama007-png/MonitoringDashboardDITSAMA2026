@@ -280,3 +280,11 @@ tbody tr:nth-child(even){background:#F8FAFD}
 .st-upcoming{background:#FEF3C7;color:#8a5a00}
 .st-ongoing{background:#DBEAFE;color:#185FA5}
 .st-selesai{background:#DCFCE7;color:#16A34A}
+
+/* ===== Bekukan kolom Aksi (sticky kanan) ===== */
+#flex-table{border-collapse:separate;border-spacing:0}
+#flex-table th:last-child,#flex-table td:last-child{
+  position:sticky;right:0;z-index:2;
+  box-shadow:-3px 0 6px rgba(0,0,0,.08)}
+#flex-table td:last-child{background:#fff}
+#flex-table th:last-child{background:#1B3A6B}
