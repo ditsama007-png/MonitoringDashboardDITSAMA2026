@@ -686,6 +686,7 @@ async function simpan() {
 
   const record = {
     "Mode": INPUT_MODE === "milestone" ? "Upcoming Milestone" : "On-Going",
+    "PIC": ($("f-pic") ? $("f-pic").value.trim() : "") || (SESSION ? SESSION.nama : ""),
     "Tanggal Kegiatan": $("f-tanggal").value,
     "Nama Kegiatan": $("f-kegiatan").value.trim(),
     "Fase Kegiatan": $("f-fase").value.trim(),
@@ -757,6 +758,7 @@ async function simpan() {
 function clearForm() {
   EDIT_ID = null;
   ["f-tanggal", "f-kegiatan", "f-fase", "f-lokasi", "f-nilai", "f-feedback"].forEach((id) => { if ($(id)) $(id).value = ""; });
+  if ($("f-pic")) $("f-pic").value = SESSION ? SESSION.nama : "";   // otomatis dari akun, tetap bisa diedit
   if ($("f-keberjalanan")) $("f-keberjalanan").selectedIndex = 0;
   ["rows-peserta", "rows-sdm", "rows-issue", "extra-cols"].forEach((id) => { if ($(id)) $(id).innerHTML = ""; });
   // seed baris default peserta & SDM lagi
