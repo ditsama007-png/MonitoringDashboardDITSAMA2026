@@ -1017,9 +1017,12 @@ function showView(view) {
 function populateInputPrograms() {
   const sel = $("in-program");
   const allowed = PROGRAMS.filter((p) => canAccessProgram(p.key));
-  const list = allowed.length ? allowed : [];
-  sel.innerHTML = list.map((p) => `<option value="${p.key}">${p.label}</option>`).join("")
-    || '<option value="">(tidak ada program yang bisa Anda isi)</option>';
+  let opts = allowed.map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
+  // Admin & Head Program dapat opsi "Semua Program"
+  if (SESSION && isAllAccess(SESSION.jabatan)) {
+    opts = '<option value="__ALL__">Semua Program</option>' + opts;
+  }
+  sel.innerHTML = opts || '<option value="">(tidak ada program yang bisa Anda isi)</option>';
 }
 
 // tampilkan form + pivot + tabel untuk program terpilih di Input Data
@@ -1027,8 +1030,17 @@ let FLEX_CACHE = null;   // {header, rows} dari DataMasuk
 
 function renderInput(key) {
   if (!key) { return; }
-  if ($("form-fields")) $("form-fields").hidden = true;
-  if ($("btn-show-form")) $("btn-show-form").textContent = "➕ Input Data Baru";
+  const isAll = key === "__ALL__";
+  // tombol input hanya untuk program spesifik
+  const btn = $("btn-show-form");
+  if (btn) {
+    btn.disabled = isAll;
+    btn.style.opacity = isAll ? ".5" : "";
+    btn.title = isAll ? "Pilih program spesifik untuk mengisi data" : "";
+  }
+  if (isAll && $("form-fields")) $("form-fields").hidden = true;
+  if ($("form-fields") && !isAll) $("form-fields").hidden = true;
+  if (btn && !isAll) btn.textContent = "➕ Input Data Baru";
   renderFlexTable(key);
 }
 
@@ -1067,14 +1079,15 @@ function buildColHistory() {
 }
 
 function renderFlexTable(key) {
-  const label = labelOf(key);
+  const isAll = key === "__ALL__";
+  const label = isAll ? "Semua Program" : labelOf(key);
   const thead = document.querySelector("#flex-table thead");
   const tbody = document.querySelector("#flex-table tbody");
   if (!thead || !tbody) return;
   const flex = FLEX_CACHE || { header: [], rows: [] };
   const header = (flex.header.length ? flex.header : ["ID", "Waktu Input", "Program", "PIC"]).filter((h) => h !== "Mode");
   // tampilkan semua data untuk program terpilih (cocokkan kode ATAU label)
-  const rows = flex.rows.filter((r) => {
+  const rows = isAll ? flex.rows.slice() : flex.rows.filter((r) => {
     const p = String(r["Program"] || "");
     return p === key || p === label;
   });
