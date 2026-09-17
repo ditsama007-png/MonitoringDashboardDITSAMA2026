@@ -25,6 +25,14 @@ const OPSI_KEBERJALANAN = [
 ];
 const OPSI_LEVEL_ISU = ["Tidak Ada", "High", "Medium", "Low"];
 
+// Pilihan Fase Kegiatan (dropdown di form input)
+const OPSI_FASE = [
+  "Persiapan", "Proses",
+  "Fase 1", "Fase 2", "Fase 3", "Fase 4", "Fase 5",
+  "Fase 6", "Fase 7", "Fase 8", "Fase 9", "Fase 10",
+  "Pelaporan",
+];
+
 // Jabatan (role). Program yang dipegang dipilih terpisah saat sign up.
 const JABATAN = ["Admin", "Head Program", "PIC"];
 
