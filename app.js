@@ -999,14 +999,21 @@ function setActiveNav(btn) {
 
 // ------------------------------------------------ akses per jabatan --------
 function isAllAccess(jab) { return (typeof ALL_ACCESS_ROLES !== "undefined") && ALL_ACCESS_ROLES.includes(jab); }
+function isFinanceOnly(jab) { return (typeof FINANCE_ONLY_ROLES !== "undefined") && FINANCE_ONLY_ROLES.includes(jab); }
 function canAccessProgram(key) {
   if (!SESSION) return false;
+  if (isFinanceOnly(SESSION.jabatan)) return false;   // Finance tak boleh input data program
   if (isAllAccess(SESSION.jabatan)) return true;
   return (SESSION.programs || []).includes(key);
 }
 function applyAccess() {
   // Semua menu tampil untuk yang sudah login (program = lihat dashboard saja).
   document.querySelectorAll('.nav-item[data-view]').forEach((btn) => { btn.style.display = ""; });
+  // Finance: sembunyikan menu "Input Data" (hanya boleh Financial)
+  if (SESSION && isFinanceOnly(SESSION.jabatan)) {
+    const inp = document.querySelector('.nav-item[data-view="input"]');
+    if (inp) inp.style.display = "none";
+  }
   $("access-label").textContent = SESSION ? (SESSION.nama + " · " + SESSION.jabatan) : "Profil";
 }
 
@@ -1029,6 +1036,7 @@ function showView(view) {
   if (isDash) {
     render();
   } else if (isInput) {
+    if (SESSION && isFinanceOnly(SESSION.jabatan)) { setActiveNav(document.querySelector('.nav-item[data-view="financial"]')); showView("financial"); return; }
     populateInputPrograms();
     renderInput($("in-program").value);
   } else if (isFinancial) {
@@ -1399,7 +1407,8 @@ function renderFinancial() {
   // dropdown program di form (yang boleh diakses)
   const sel = $("fin-program");
   if (sel && !sel.options.length) {
-    const allowed = PROGRAMS.filter((p) => canAccessProgram(p.key));
+    const canAll = SESSION && (isAllAccess(SESSION.jabatan) || isFinanceOnly(SESSION.jabatan));
+    const allowed = canAll ? PROGRAMS : PROGRAMS.filter((p) => canAccessProgram(p.key));
     sel.innerHTML = (allowed.length ? allowed : PROGRAMS).map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
   }
 
