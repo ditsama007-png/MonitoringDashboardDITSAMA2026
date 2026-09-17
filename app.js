@@ -1175,14 +1175,18 @@ function drawGantt(host, items) {
   });
   let gMin = items[0].d, gMax = items[0].d;
   items.forEach((x) => { if (x.d < gMin) gMin = x.d; if (x.d > gMax) gMax = x.d; });
-  const span = Math.max((gMax - gMin) / 86400000, 1);
+  const rawSpan = Math.max((gMax - gMin) / 86400000, 1);
+  const pad = Math.max(rawSpan * 0.08, 1);          // padding kiri-kanan
+  const base = gMin.getTime() - pad * 86400000;
+  const total = rawSpan + pad * 2;                   // total hari termasuk padding
   const warna = { "persiapan": "#2F6FB0", "pelaksanaan": "#16A34A", "pelaporan": "#F59E0B", "proses": "#8B5CF6", "evaluasi": "#DC2626" };
   const fmt = (d) => String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0");
   let html = '<div class="gantt">';
   Object.keys(byFase).sort((a, b) => byFase[a].min - byFase[b].min).forEach((f) => {
     const o = byFase[f];
-    const left = ((o.min - gMin) / 86400000) / span * 100;
-    const width = Math.max(((o.max - o.min) / 86400000 + 1) / span * 100, 2);
+    let left = (o.min.getTime() - base) / 86400000 / total * 100;
+    let width = ((o.max - o.min) / 86400000 + 1) / total * 100;
+    width = Math.max(width, 4); if (left + width > 100) width = 100 - left;
     const c = warna[f.toLowerCase()] || "#64748B";
     html += '<div class="gantt-row"><div class="gantt-lab">' + f + '</div>' +
       '<div class="gantt-track"><div class="gantt-bar" style="left:' + left + '%;width:' + width + '%;background:' + c + ';" title="' + f + ': ' + fmt(o.min) + '–' + fmt(o.max) + '">' +
@@ -1227,7 +1231,10 @@ function renderDashGantt() {
   // batas waktu global
   let gMin = data[0].d, gMax = data[0].d;
   data.forEach((x) => { if (x.d < gMin) gMin = x.d; if (x.d > gMax) gMax = x.d; });
-  const span = Math.max((gMax - gMin) / 86400000, 1);
+  const rawSpan = Math.max((gMax - gMin) / 86400000, 1);
+  const pad = Math.max(rawSpan * 0.08, 1);
+  const base = gMin.getTime() - pad * 86400000;
+  const total = rawSpan + pad * 2;
   const fmt = (d) => String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0");
 
   // group per program -> per fase (rentang)
@@ -1245,8 +1252,9 @@ function renderDashGantt() {
     const c = progColor(pk);
     Object.keys(byFase).sort((a, b) => byFase[a].min - byFase[b].min).forEach((f) => {
       const o = byFase[f];
-      const left = ((o.min - gMin) / 86400000) / span * 100;
-      const width = Math.max(((o.max - o.min) / 86400000 + 1) / span * 100, 2);
+      let left = (o.min.getTime() - base) / 86400000 / total * 100;
+      let width = ((o.max - o.min) / 86400000 + 1) / total * 100;
+      width = Math.max(width, 4); if (left + width > 100) width = 100 - left;
       html += '<div class="gantt-row"><div class="gantt-lab">' + labelOf(pk) + ' · ' + f + '</div>' +
         '<div class="gantt-track"><div class="gantt-bar" style="left:' + left + '%;width:' + width + '%;background:' + c + ';" title="' + labelOf(pk) + ' - ' + f + ': ' + fmt(o.min) + '–' + fmt(o.max) + '">' +
         '<span>' + fmt(o.min) + '–' + fmt(o.max) + '</span></div></div></div>';
