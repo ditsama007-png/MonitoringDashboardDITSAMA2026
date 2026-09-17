@@ -34,8 +34,11 @@ const OPSI_FASE = [
 ];
 
 // Jabatan (role). Program yang dipegang dipilih terpisah saat sign up.
-const JABATAN = ["Admin", "Head Program", "PIC"];
+const JABATAN = ["Admin", "Head Program", "Finance", "PIC"];
 
-// Jabatan yang otomatis bisa akses SEMUA program.
-// Selain ini (PIC), aksesnya = program yang dipilih saat sign up.
-const ALL_ACCESS_ROLES = ["Admin", "Head Program"];
+// Jabatan yang otomatis bisa MELIHAT semua program.
+// (Finance juga lihat semua, tapi hanya boleh isi menu Financial — diatur di app.js)
+const ALL_ACCESS_ROLES = ["Admin", "Head Program", "Finance"];
+
+// Jabatan yang HANYA boleh mengisi menu Financial (tak boleh Input Data program).
+const FINANCE_ONLY_ROLES = ["Finance"];
