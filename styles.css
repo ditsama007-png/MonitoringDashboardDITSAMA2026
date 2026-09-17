@@ -298,13 +298,15 @@ tbody tr:nth-child(even){background:#F8FAFD}
 
 /* ===== Timeline Gantt fase ===== */
 .gantt{margin-top:.6rem}
-.gantt-row{display:grid;grid-template-columns:110px 1fr;gap:8px;align-items:center;margin-bottom:8px}
-.gantt-lab{font-size:.8rem;font-weight:700;color:#1B3A6B;text-align:right}
-.gantt-track{position:relative;height:26px;background:#F1F5FB;border-radius:7px}
-.gantt-bar{position:absolute;top:3px;height:20px;border-radius:6px;display:flex;align-items:center;
-  min-width:2%;box-shadow:0 1px 3px rgba(0,0,0,.15)}
-.gantt-bar span{color:#fff;font-size:.68rem;font-weight:600;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gantt-axis{display:flex;justify-content:space-between;font-size:.7rem;color:#6B7688;margin-left:118px;margin-top:2px}
+.gantt-row{display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:center;margin-bottom:9px}
+.gantt-lab{font-size:.78rem;font-weight:700;color:#1B3A6B;text-align:right;line-height:1.15;
+  white-space:normal;overflow:hidden}
+.gantt-track{position:relative;height:28px;background:#F1F5FB;border-radius:8px;border:1px solid #E8EEF7}
+.gantt-bar{position:absolute;top:3px;height:22px;border-radius:6px;display:flex;align-items:center;
+  min-width:4%;box-shadow:0 1px 3px rgba(0,0,0,.15);transition:filter .15s}
+.gantt-bar:hover{filter:brightness(1.05)}
+.gantt-bar span{color:#fff;font-size:.68rem;font-weight:600;padding:0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gantt-axis{display:flex;justify-content:space-between;font-size:.7rem;color:#6B7688;margin-left:170px;margin-top:4px}
 
 /* legenda program di Gantt */
 .gantt-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;padding-top:8px;border-top:1px solid #E5EAF2}
