@@ -271,7 +271,7 @@ function handleSignup_(b) {
   var nama = String(b.nama || "").trim(), jab = String(b.jabatan || "").trim(),
       email = String(b.email || "").trim(), pass = String(b.password || ""), code = b.code;
   if (!nama || !jab || !email || !pass) return json_({ ok: false, error: "Lengkapi semua kolom." });
-  if (!ROLE_ACCESS[jab]) return json_({ ok: false, error: "Jabatan tidak dikenal." });
+  if (["Admin", "Head Program", "Finance", "PIC"].indexOf(jab) < 0) return json_({ ok: false, error: "Jabatan tidak dikenal." });
   if (findUser_(nama)) return json_({ ok: false, error: "Nama sudah terdaftar." });
   if (findUserByEmail_(email)) return json_({ ok: false, error: "Email sudah terdaftar." });
   if (!checkCode_(email, code)) return json_({ ok: false, error: "Kode verifikasi salah / kedaluwarsa." });
