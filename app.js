@@ -59,10 +59,21 @@ async function loadData() {
 }
 
 // -------------------------------------------------- perhitungan dashboard ---
+// Parser tanggal universal: menerima Date, ISO (yyyy-mm-dd) & dd/mm/yyyy
+function parseTgl(v) {
+  if (!v) return null;
+  if (v instanceof Date) return isNaN(v) ? null : v;
+  const s = String(v).trim();
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);           // ISO
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/.exec(s);   // dd/mm/yyyy (Indonesia)
+  if (m) { let dd = +m[1], mm = +m[2], yy = +m[3]; if (yy < 100) yy += 2000; return new Date(yy, mm - 1, dd); }
+  const d = new Date(s); return isNaN(d) ? null : d;
+}
+
 function monthLabel(d) {
-  if (!d) return "";
-  const dt = new Date(d);
-  if (isNaN(dt)) return "";
+  const dt = parseTgl(d);
+  if (!dt) return "";
   return dt.toLocaleDateString("id-ID", { month: "short", year: "numeric" });
 }
 
@@ -213,9 +224,12 @@ function flexRowsFiltered() {
 let CAL_MONTH = null;   // Date penanda bulan yang ditampilkan
 function renderCalendar(rows) {
   const host = $("calendar"); if (!host) return;
-  const dated = rows.filter((r) => r.tanggal && !isNaN(new Date(r.tanggal)));
+  const dated = rows.filter((r) => r.tanggal && parseTgl(r.tanggal));
   if (!CAL_MONTH) {
-    CAL_MONTH = dated.length ? new Date(dated[0].tanggal) : new Date();
+    // buka di bulan data TERBARU (tanggal paling akhir), biar data baru langsung terlihat
+    let latest = null;
+    dated.forEach((r) => { const d = parseTgl(r.tanggal); if (!latest || d > latest) latest = d; });
+    CAL_MONTH = latest || new Date();
     CAL_MONTH.setDate(1);
   }
   const y = CAL_MONTH.getFullYear(), m = CAL_MONTH.getMonth();
@@ -225,7 +239,7 @@ function renderCalendar(rows) {
   // kegiatan per tanggal (key: YYYY-MM-DD)
   const byDay = {};
   dated.forEach((r) => {
-    const d = new Date(r.tanggal);
+    const d = parseTgl(r.tanggal);
     if (d.getFullYear() === y && d.getMonth() === m) {
       const key = d.getDate();
       (byDay[key] = byDay[key] || []).push(r.kegiatan || r.jenis || "Kegiatan");
@@ -342,7 +356,7 @@ function aggByMonth(rows, fields) {
   const map = {};
   rows.forEach((r) => {
     const m = monthLabel(r.tanggal); if (!m) return;
-    if (!map[m]) { map[m] = {}; fields.forEach((f) => (map[m][f] = 0)); map[m]._d = new Date(r.tanggal); }
+    if (!map[m]) { map[m] = {}; fields.forEach((f) => (map[m][f] = 0)); map[m]._d = parseTgl(r.tanggal); }
     fields.forEach((f) => (map[m][f] += +r[f] || 0));
   });
   return Object.keys(map).map((m) => ({ m, ...map[m] })).sort((a, b) => a._d - b._d);
@@ -515,7 +529,7 @@ function renderMilestones(rows) {
   const el = $("milestones-list"); el.innerHTML = "";
   if (!items.length) { el.innerHTML = '<div class="empty">Belum ada milestone.</div>'; return; }
   items.slice(0, 8).forEach((r) => {
-    const d = new Date(r.tanggal);
+    const d = parseTgl(r.tanggal);
     const day = isNaN(d) ? "--" : d.getDate();
     const mon = isNaN(d) ? "" : d.toLocaleDateString("id-ID", { month: "short" });
     el.insertAdjacentHTML("beforeend",
@@ -1069,6 +1083,7 @@ async function loadFlex() {
   } catch (e) { console.error("read_flex gagal:", e); }
   buildColHistory();
   renderNavBadges();
+  CAL_MONTH = null;   // biar kalender re-center ke bulan data terbaru
   if ($("view-dash") && !$("view-dash").hidden) renderPeserta();
 }
 
@@ -1177,8 +1192,8 @@ function drawGantt(host, items) {
   host.innerHTML = html;
 }
 function ganttItems(rawRows) {
-  return rawRows.map((r) => ({ d: new Date(r["Tanggal Kegiatan"]), fase: String(r["Fase Kegiatan"] || "").trim() }))
-    .filter((x) => x.fase && !isNaN(x.d));
+  return rawRows.map((r) => ({ d: parseTgl(r["Tanggal Kegiatan"]), fase: String(r["Fase Kegiatan"] || "").trim() }))
+    .filter((x) => x.fase && x.d);
 }
 function renderGantt(key) {
   const label = labelOf(key);
@@ -1205,8 +1220,8 @@ function renderDashGantt() {
   if (fb && fb !== "Semua") raw = raw.filter((r) => monthLabel(r["Tanggal Kegiatan"]) === fb);
 
   // kumpulkan (program, fase, tanggal)
-  const data = raw.map((r) => ({ prog: keyFromStored(r["Program"]), d: new Date(r["Tanggal Kegiatan"]), fase: String(r["Fase Kegiatan"] || "").trim() }))
-    .filter((x) => x.fase && !isNaN(x.d));
+  const data = raw.map((r) => ({ prog: keyFromStored(r["Program"]), d: parseTgl(r["Tanggal Kegiatan"]), fase: String(r["Fase Kegiatan"] || "").trim() }))
+    .filter((x) => x.fase && x.d);
   if (!data.length) { host.innerHTML = '<div class="empty">Belum ada data fase.</div>'; return; }
 
   // batas waktu global
