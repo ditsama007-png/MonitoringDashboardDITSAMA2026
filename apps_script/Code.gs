@@ -339,7 +339,7 @@ function handleWriteFlex_(b) {
 
   var record = b.record || {};
   record["Program"] = b.program || record["Program"] || "";
-  record["PIC"] = user.nama || record["PIC"] || "";
+  record["PIC"] = record["PIC"] || user.nama || record["PIC"] || "";
   record["Waktu Input"] = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
   record["ID"] = record["ID"] || Utilities.getUuid();
 
