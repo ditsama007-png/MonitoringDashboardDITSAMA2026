@@ -141,8 +141,6 @@ function render() {
   renderPortfolio(rows, shownProgs);
   renderIssues(rows);
   renderMilestones(rows);
-  renderPivot(rows);
-  renderDetail(rows);
   renderCalendar(rows);
   renderDashGantt();
   renderPeserta();
@@ -338,12 +336,14 @@ function renderPortfolio(rows, progs) {
     const pr = rows.filter((r) => r._prog === k);
     const total = pr.filter((r) => (r.kegiatan || "").trim()).length;
     const selesai = pr.filter((r) => (r.kegiatan || "").trim() && r.status === "Selesai").length;
+    const pics = [...new Set(pr.map((r) => (r.pic || "").trim()).filter(Boolean))];
+    const picTxt = pics.length ? "PIC: " + pics.join(", ") : "Kegiatan selesai / total";
     const prog = programProgress(pr);
     const [stat, cls] = progressStatus(prog);
     const p = Math.round(prog * 100);
     el.insertAdjacentHTML("beforeend",
       `<div class="port">
-        <div class="nm">${labelOf(k)}<small>Kegiatan selesai / total</small></div>
+        <div class="nm">${labelOf(k)}<small>${picTxt}</small></div>
         <div class="cnt">${selesai} / ${total}</div>
         <div><div class="bar"><span style="width:${Math.min(p,100)}%"></span></div>
              <div class="pct">${p}% <small style="font-weight:400;color:#6B7688;">Nilai Performance</small></div></div>
