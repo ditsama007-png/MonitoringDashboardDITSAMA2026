@@ -471,15 +471,24 @@ function renderPeserta() {
     }).join("");
   }
 
-  // ---- SDM terlibat per peran (jumlah) ----
-  const sdmSet = {};
-  header.forEach((h) => { const m = /^SDM (.+) \(jumlah\)$/.exec(h); if (m) sdmSet[m[1]] = 1; });
-  const sdmPeran = Object.keys(sdmSet);
-  const perSDM = {}; sdmPeran.forEach((p) => perSDM[p] = 0);
-  rows.forEach((r) => { sdmPeran.forEach((p) => { perSDM[p] += num(r["SDM " + p + " (jumlah)"]); }); });
+  // ---- SDM terlibat per peran: HITUNG NAMA UNIK ----
+  // kumpulkan set nama unik per peran dari kolom "SDM {peran} - Nama N"
+  const perSDMset = {};   // peran -> Set(nama)
+  rows.forEach((r) => {
+    Object.keys(r).forEach((k) => {
+      const m = /^SDM (.+) - Nama \d+$/.exec(k);
+      if (m) {
+        const peran = m[1];
+        const nama = String(r[k] || "").trim().toLowerCase();
+        if (nama) { (perSDMset[peran] = perSDMset[peran] || new Set()).add(nama); }
+      }
+    });
+  });
+  const perSDM = {}; Object.keys(perSDMset).forEach((p) => perSDM[p] = perSDMset[p].size);
+  const sdmPeran = Object.keys(perSDM);
   const sthead = document.querySelector("#peserta-sdm thead");
   const stbody = document.querySelector("#peserta-sdm tbody");
-  if (sthead) sthead.innerHTML = "<tr><th>Peran SDM</th><th>Jumlah Terlibat</th></tr>";
+  if (sthead) sthead.innerHTML = "<tr><th>Peran SDM</th><th>Jumlah (orang unik)</th></tr>";
   if (stbody) {
     const filled = sdmPeran.filter((p) => perSDM[p] > 0);
     if (!filled.length) { stbody.innerHTML = '<tr><td colspan="2" class="empty">Belum ada data SDM.</td></tr>'; }
@@ -582,14 +591,17 @@ function addSDMRow(peran, jml) {
   const box = $("rows-sdm"); if (!box) return;
   const row = document.createElement("div"); row.className = "sdm-block";
   row.innerHTML =
-    '<div class="grid-2"><label>Peran<input class="s-peran" placeholder="mis. Dosen"></label>' +
-    '<label>Jumlah<input class="s-jml" type="number" placeholder="0"></label></div>' +
+    '<div class="grid-2"><label>Peran<select class="s-peran-sel"><option>Dosen</option><option>Asisten</option><option>Staff</option><option>Mitra</option><option value="__LAINNYA__">Lainnya…</option></select>' +
+    '<input class="s-peran-custom" placeholder="ketik peran lain" hidden style="margin-top:4px;"></label>' +
+    '<label>Jumlah (otomatis)<input class="s-jml" type="number" placeholder="0" readonly></label></div>' +
     '<div class="sub" style="margin:2px 0 4px;">Daftar nama + unggah SK (file → Google Drive)</div>' +
     '<div class="sdm-names"></div>' +
     '<button type="button" class="btn-ghost s-addname">➕ Tambah nama</button> ' +
     '<button type="button" class="btn-ghost s-delrole" style="color:#DC2626;">✕ Hapus peran</button>';
   box.appendChild(row);
-  if (peran) row.querySelector(".s-peran").value = peran;
+  const _sel = row.querySelector(".s-peran-sel"), _cust = row.querySelector(".s-peran-custom");
+  _sel.addEventListener("change", () => { _cust.hidden = _sel.value !== "__LAINNYA__"; if (!_cust.hidden) _cust.focus(); });
+  if (peran) { if (["Dosen","Asisten","Staff","Mitra"].includes(peran)) _sel.value = peran; else { _sel.value = "__LAINNYA__"; _cust.hidden = false; _cust.value = peran; } }
   if (jml) row.querySelector(".s-jml").value = jml;
   const names = row.querySelector(".sdm-names");
   addSDMName(names);   // satu nama awal
@@ -599,7 +611,7 @@ function addSDMRow(peran, jml) {
 function addSDMName(container, nama, link) {
   const nr = document.createElement("div"); nr.className = "sdm-name-row";
   nr.innerHTML =
-    '<input class="s-nama" placeholder="nama orang">' +
+    '<input class="s-nama" list="sdm-name-list" placeholder="nama orang (ketik/pilih)">' +
     '<button type="button" class="btn-ghost s-upload"><i>📎</i> Unggah SK</button>' +
     '<span class="s-status"></span>' +
     '<input type="file" class="s-file" accept="application/pdf,image/*" hidden>' +
@@ -609,9 +621,12 @@ function addSDMName(container, nama, link) {
   const statusEl = nr.querySelector(".s-status");
   if (link) { statusEl.dataset.link = link; statusEl.innerHTML = '<a href="' + link + '" target="_blank">SK ✓</a>'; }
   const fileInput = nr.querySelector(".s-file");
+  const syncJml = () => { const bl = nr.closest(".sdm-block"); if (!bl) return; const n = [...bl.querySelectorAll(".sdm-name-row .s-nama")].filter((i) => i.value.trim()).length; const j = bl.querySelector(".s-jml"); if (j) j.value = n; };
+  nr.querySelector(".s-nama").addEventListener("input", syncJml);
   nr.querySelector(".s-upload").addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", () => uploadSK(nr));
-  nr.querySelector(".s-namedel").addEventListener("click", () => nr.remove());
+  nr.querySelector(".s-namedel").addEventListener("click", () => { nr.remove(); syncJml(); });
+  syncJml();
 }
 async function uploadSK(nr) {
   const file = nr.querySelector(".s-file").files[0];
@@ -650,7 +665,7 @@ function collectPeserta() {
 }
 function collectSDM() {
   return [...document.querySelectorAll("#rows-sdm .sdm-block")].map((b) => ({
-    peran: b.querySelector(".s-peran").value.trim(),
+    peran: (b.querySelector(".s-peran-sel").value === "__LAINNYA__" ? b.querySelector(".s-peran-custom").value.trim() : b.querySelector(".s-peran-sel").value),
     jml: b.querySelector(".s-jml").value,
     names: [...b.querySelectorAll(".sdm-name-row")].map((nr) => ({
       nama: nr.querySelector(".s-nama").value.trim(),
@@ -1093,6 +1108,15 @@ function buildColHistory() {
   const sys = { "ID": 1, "Waktu Input": 1, "Program": 1, "PIC": 1, "Mode": 1 };
   const cols = ((FLEX_CACHE && FLEX_CACHE.header) || []).filter((h) => h && !sys[h]);
   dl.innerHTML = [...new Set(cols)].map((c) => `<option value="${String(c).replace(/"/g, "&quot;")}">`).join("");
+  // datalist nama SDM (semua nama yang pernah diisi, lintas PIC)
+  const sd = $("sdm-name-list");
+  if (sd) {
+    const names = new Set();
+    ((FLEX_CACHE && FLEX_CACHE.rows) || []).forEach((r) => {
+      Object.keys(r).forEach((k) => { if (/^SDM .+ - Nama \d+$/.test(k) && String(r[k] || "").trim()) names.add(String(r[k]).trim()); });
+    });
+    sd.innerHTML = [...names].map((n) => `<option value="${String(n).replace(/"/g, "&quot;")}">`).join("");
+  }
 }
 
 function renderFlexTable(key) {
