@@ -915,6 +915,7 @@ function initSelects() {
   // program form
   $("in-program").innerHTML = PROGRAMS.map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
   if ($("f-keberjalanan")) $("f-keberjalanan").innerHTML = ["", ...OPSI_KEBERJALANAN].map((o) => `<option>${o}</option>`).join("");
+  if ($("f-fase")) $("f-fase").innerHTML = ["", ...(typeof OPSI_FASE !== "undefined" ? OPSI_FASE : [])].map((o) => `<option>${o}</option>`).join("");
   // checkbox program (untuk sign up)
   const box = $("a-programs");
   if (box) {
