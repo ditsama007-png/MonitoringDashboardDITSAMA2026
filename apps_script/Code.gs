@@ -34,8 +34,8 @@ var DATA_START_ROW = 9;
 
 // ---- AUTH: sheet penyimpan akun + aturan akses per jabatan ----
 var USERS_SHEET = "Users";
-var SALT = "ditsama-2026-salt";   // ganti dengan teks acak rahasia kamu
-var ACCESS_PASSWORD = "Ditsama_30";   // password akses (blur) — cek di server
+var SALT = "isi dengan pw acak";   // ganti dengan teks acak rahasia kamu
+var ACCESS_PASSWORD = "isi dengan pw";   // password akses (blur) — cek di server
 
 // jabatan -> program yang boleh diisi
 var ROLE_ACCESS = {
