@@ -215,7 +215,7 @@ function usersSheet_() {
   var sh = ss.getSheetByName(USERS_SHEET);
   if (!sh) {
     sh = ss.insertSheet(USERS_SHEET);
-    sh.getRange(1, 1, 1, 5).setValues([["Nama", "Jabatan", "Email", "PasswordHash", "Dibuat"]])
+    sh.getRange(1, 1, 1, 6).setValues([["Nama", "Jabatan", "Email", "PasswordHash", "Programs", "Dibuat"]])
       .setFontWeight("bold").setBackground("#1B3A6B").setFontColor("#FFFFFF");
   }
   return sh;
@@ -228,10 +228,11 @@ function findUser_(nama) {
   var sh = usersSheet_();
   var last = sh.getLastRow();
   if (last < 2) return null;
-  var data = sh.getRange(2, 1, last - 1, 5).getValues();
+  var data = sh.getRange(2, 1, last - 1, 6).getValues();
   for (var i = 0; i < data.length; i++) {
     if (String(data[i][0]).toLowerCase() === String(nama).toLowerCase()) {
-      return { nama: data[i][0], jabatan: data[i][1], email: data[i][2], hash: data[i][3] };
+      return { nama: data[i][0], jabatan: data[i][1], email: data[i][2], hash: data[i][3],
+               programs: String(data[i][4] || "").split(",").filter(function(x){return x;}) };
     }
   }
   return null;
@@ -240,10 +241,11 @@ function findUserByEmail_(email) {
   var sh = usersSheet_();
   var last = sh.getLastRow();
   if (last < 2) return null;
-  var data = sh.getRange(2, 1, last - 1, 5).getValues();
+  var data = sh.getRange(2, 1, last - 1, 6).getValues();
   for (var i = 0; i < data.length; i++) {
     if (String(data[i][2]).toLowerCase() === String(email).toLowerCase()) {
-      return { row: i + 2, nama: data[i][0], jabatan: data[i][1], email: data[i][2], hash: data[i][3] };
+      return { row: i + 2, nama: data[i][0], jabatan: data[i][1], email: data[i][2], hash: data[i][3],
+               programs: String(data[i][4] || "").split(",").filter(function(x){return x;}) };
     }
   }
   return null;
@@ -272,10 +274,12 @@ function handleSignup_(b) {
       email = String(b.email || "").trim(), pass = String(b.password || ""), code = b.code;
   if (!nama || !jab || !email || !pass) return json_({ ok: false, error: "Lengkapi semua kolom." });
   if (["Admin", "Head Program", "Finance", "PIC"].indexOf(jab) < 0) return json_({ ok: false, error: "Jabatan tidak dikenal." });
+  var programs = (b.programs && b.programs.join) ? b.programs : [];
+  if (jab === "PIC" && programs.length === 0) return json_({ ok: false, error: "Pilih minimal satu program." });
   if (findUser_(nama)) return json_({ ok: false, error: "Nama sudah terdaftar." });
   if (findUserByEmail_(email)) return json_({ ok: false, error: "Email sudah terdaftar." });
   if (!checkCode_(email, code)) return json_({ ok: false, error: "Kode verifikasi salah / kedaluwarsa." });
-  usersSheet_().appendRow([nama, jab, email, hash_(pass), new Date()]);
+  usersSheet_().appendRow([nama, jab, email, hash_(pass), programs.join(","), new Date()]);
   CacheService.getScriptCache().remove("code_" + email.toLowerCase());
   return json_({ ok: true });
 }
@@ -296,9 +300,9 @@ function handleLogin_(b) {
   if (u.hash !== hash_(pass)) return json_({ ok: false, error: "Password salah." });
   // buat token & simpan 6 jam
   var token = Utilities.getUuid();
-  CacheService.getScriptCache().put("sess_" + token,
-    JSON.stringify({ nama: u.nama, jabatan: u.jabatan, email: u.email }), 21600);
-  return json_({ ok: true, token: token, user: { nama: u.nama, jabatan: u.jabatan, email: u.email } });
+  var sess = { nama: u.nama, jabatan: u.jabatan, email: u.email, programs: u.programs || [] };
+  CacheService.getScriptCache().put("sess_" + token, JSON.stringify(sess), 21600);
+  return json_({ ok: true, token: token, user: sess });
 }
 function getUserByToken_(token) {
   if (!token) return null;
