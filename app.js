@@ -9,10 +9,7 @@ let IS_DEMO = false;
 const $ = (id) => document.getElementById(id);
 const fmtRupiah = (n) => {
   n = Number(n) || 0;
-  if (n >= 1e9) return "Rp " + (n / 1e9).toFixed(1).replace(".0", "") + " M";
-  if (n >= 1e6) return "Rp " + Math.round(n / 1e6) + " Jt";
-  if (n >= 1e3) return "Rp " + Math.round(n / 1e3) + " Rb";
-  return "Rp " + Math.round(n);
+  return "Rp " + Math.round(n).toLocaleString("id-ID");
 };
 const pct = (x) => Math.round((x || 0) * 100) + "%";
 const KEBER_SKOR = { "sesuai rencana": 1, "ada kendala": 0.7, "tidak sesuai rencana": 0.4 };
