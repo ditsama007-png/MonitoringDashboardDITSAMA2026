@@ -472,16 +472,23 @@ function renderPeserta() {
   }
 
   // ---- SDM terlibat per peran: HITUNG NAMA UNIK ----
-  // kumpulkan set nama unik per peran dari kolom "SDM {peran} - Nama N"
-  const perSDMset = {};   // peran -> Set(nama)
+  // Utama: kolom "SDM {peran} (daftar nama)" (dipisah koma).
+  // Cadangan (data lama): kolom "SDM {peran} - Nama N".
+  const perSDMset = {};   // peran -> Set(nama unik, lowercase)
+  const addNama = (peran, val) => {
+    String(val || "").split(/[\n,;]+/).forEach((s) => {
+      const nm = s.trim().toLowerCase();
+      if (nm) { (perSDMset[peran] = perSDMset[peran] || new Set()).add(nm); }
+    });
+  };
   rows.forEach((r) => {
     Object.keys(r).forEach((k) => {
-      const m = /^SDM (.+) - Nama \d+$/.exec(k);
-      if (m) {
-        const peran = m[1];
-        const nama = String(r[k] || "").trim().toLowerCase();
-        if (nama) { (perSDMset[peran] = perSDMset[peran] || new Set()).add(nama); }
-      }
+      let m = /^SDM (.+) \(daftar nama\)$/.exec(k);
+      if (m) { addNama(m[1], r[k]); return; }
+      m = /^SDM (.+) - Nama \d+$/.exec(k);
+      if (m) { addNama(m[1], r[k]); return; }
+      m = /^SDM (.+) \(nama\)$/.exec(k);   // format paling lama
+      if (m) { addNama(m[1], r[k]); }
     });
   });
   const perSDM = {}; Object.keys(perSDMset).forEach((p) => perSDM[p] = perSDMset[p].size);
@@ -587,57 +594,43 @@ function addPesertaRow(kat, ter, had) {
   if (had) row.querySelector(".p-had").value = had;
   row.querySelector(".dyn-del").addEventListener("click", () => row.remove());
 }
-function addSDMRow(peran, jml) {
+function splitNames(text) {
+  return String(text || "").split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+}
+function addSDMRow(peran, namesText) {
   const box = $("rows-sdm"); if (!box) return;
   const row = document.createElement("div"); row.className = "sdm-block";
   row.innerHTML =
     '<div class="grid-2"><label>Peran<select class="s-peran-sel"><option>Dosen</option><option>Asisten</option><option>Staff</option><option>Mitra</option><option value="__LAINNYA__">Lainnya…</option></select>' +
     '<input class="s-peran-custom" placeholder="ketik peran lain" hidden style="margin-top:4px;"></label>' +
     '<label>Jumlah (otomatis)<input class="s-jml" type="number" placeholder="0" readonly></label></div>' +
-    '<div class="sub" style="margin:2px 0 4px;">Daftar nama + unggah SK (file → Google Drive)</div>' +
-    '<div class="sdm-names"></div>' +
-    '<button type="button" class="btn-ghost s-addname">➕ Tambah nama</button> ' +
-    '<button type="button" class="btn-ghost s-delrole" style="color:#DC2626;">✕ Hapus peran</button>';
+    '<label>Daftar Nama (boleh paste banyak — pisah dengan Enter atau koma)' +
+      '<textarea class="s-names" rows="4" placeholder="Budi Santoso&#10;Sari Dewi&#10;Andi Pratama"></textarea></label>' +
+    '<div class="sdm-sk-row"><button type="button" class="btn-ghost s-upload">📎 Unggah SK (opsional, 1 file)</button> ' +
+      '<span class="s-status"></span><input type="file" class="s-file" accept="application/pdf,image/*" hidden></div>' +
+    '<button type="button" class="btn-ghost s-delrole" style="color:#DC2626;margin-top:4px;">✕ Hapus peran</button>';
   box.appendChild(row);
   const _sel = row.querySelector(".s-peran-sel"), _cust = row.querySelector(".s-peran-custom");
   _sel.addEventListener("change", () => { _cust.hidden = _sel.value !== "__LAINNYA__"; if (!_cust.hidden) _cust.focus(); });
-  if (peran) { if (["Dosen","Asisten","Staff","Mitra"].includes(peran)) _sel.value = peran; else { _sel.value = "__LAINNYA__"; _cust.hidden = false; _cust.value = peran; } }
-  if (jml) row.querySelector(".s-jml").value = jml;
-  const names = row.querySelector(".sdm-names");
-  addSDMName(names);   // satu nama awal
-  row.querySelector(".s-addname").addEventListener("click", () => addSDMName(names));
+  if (peran) { if (["Dosen", "Asisten", "Staff", "Mitra"].includes(peran)) _sel.value = peran; else { _sel.value = "__LAINNYA__"; _cust.hidden = false; _cust.value = peran; } }
+  const ta = row.querySelector(".s-names");
+  const syncJml = () => { row.querySelector(".s-jml").value = splitNames(ta.value).length; };
+  ta.addEventListener("input", syncJml);
+  if (namesText) ta.value = namesText;
+  syncJml();
+  const fileInput = row.querySelector(".s-file");
+  row.querySelector(".s-upload").addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => uploadSKrole(row));
   row.querySelector(".s-delrole").addEventListener("click", () => row.remove());
 }
-function addSDMName(container, nama, link) {
-  const nr = document.createElement("div"); nr.className = "sdm-name-row";
-  nr.innerHTML =
-    '<input class="s-nama" list="sdm-name-list" placeholder="nama orang (ketik/pilih)">' +
-    '<button type="button" class="btn-ghost s-upload"><i>📎</i> Unggah SK</button>' +
-    '<span class="s-status"></span>' +
-    '<input type="file" class="s-file" accept="application/pdf,image/*" hidden>' +
-    '<button type="button" class="s-namedel" title="Hapus nama">✕</button>';
-  container.appendChild(nr);
-  if (nama) nr.querySelector(".s-nama").value = nama;
-  const statusEl = nr.querySelector(".s-status");
-  if (link) { statusEl.dataset.link = link; statusEl.innerHTML = '<a href="' + link + '" target="_blank">SK ✓</a>'; }
-  const fileInput = nr.querySelector(".s-file");
-  const syncJml = () => { const bl = nr.closest(".sdm-block"); if (!bl) return; const n = [...bl.querySelectorAll(".sdm-name-row .s-nama")].filter((i) => i.value.trim()).length; const j = bl.querySelector(".s-jml"); if (j) j.value = n; };
-  nr.querySelector(".s-nama").addEventListener("input", syncJml);
-  nr.querySelector(".s-upload").addEventListener("click", () => fileInput.click());
-  fileInput.addEventListener("change", () => uploadSK(nr));
-  nr.querySelector(".s-namedel").addEventListener("click", () => { nr.remove(); syncJml(); });
-  syncJml();
-}
-async function uploadSK(nr) {
-  const file = nr.querySelector(".s-file").files[0];
-  const statusEl = nr.querySelector(".s-status");
+async function uploadSKrole(row) {
+  const file = row.querySelector(".s-file").files[0];
+  const statusEl = row.querySelector(".s-status");
   if (!file) return;
-  // format nama file: Jabatan_Nama
-  const block = nr.closest(".sdm-block");
-  const peran = (block.querySelector(".s-peran").value.trim() || "SDM").replace(/\s+/g, "");
-  const nama = (nr.querySelector(".s-nama").value.trim() || "Tanpa Nama").replace(/\s+/g, "");
+  const sel = row.querySelector(".s-peran-sel");
+  const peran = (sel.value === "__LAINNYA__" ? row.querySelector(".s-peran-custom").value.trim() : sel.value) || "SDM";
   const ext = (file.name.split(".").pop() || "pdf");
-  const fname = peran + "_" + nama + "." + ext;
+  const fname = peran.replace(/\s+/g, "") + "_SK." + ext;
   if (!API_URL) { statusEl.textContent = "(demo) " + fname; return; }
   statusEl.textContent = "Mengunggah...";
   try {
@@ -664,14 +657,17 @@ function collectPeserta() {
   })).filter((x) => x.kat);
 }
 function collectSDM() {
-  return [...document.querySelectorAll("#rows-sdm .sdm-block")].map((b) => ({
-    peran: (b.querySelector(".s-peran-sel").value === "__LAINNYA__" ? b.querySelector(".s-peran-custom").value.trim() : b.querySelector(".s-peran-sel").value),
-    jml: b.querySelector(".s-jml").value,
-    names: [...b.querySelectorAll(".sdm-name-row")].map((nr) => ({
-      nama: nr.querySelector(".s-nama").value.trim(),
-      link: nr.querySelector(".s-status").dataset.link || "",
-    })).filter((n) => n.nama),
-  })).filter((x) => x.peran);
+  return [...document.querySelectorAll("#rows-sdm .sdm-block")].map((b) => {
+    const sel = b.querySelector(".s-peran-sel");
+    const peran = sel.value === "__LAINNYA__" ? b.querySelector(".s-peran-custom").value.trim() : sel.value;
+    const names = splitNames(b.querySelector(".s-names").value);
+    return {
+      peran: peran,
+      jml: names.length,
+      names: names,
+      link: (b.querySelector(".s-status").dataset.link || ""),
+    };
+  }).filter((x) => x.peran);
 }
 function addIssueRow(nama, level, pihak, solve) {
   const box = $("rows-issue"); if (!box) return;
@@ -731,10 +727,8 @@ async function simpan() {
     });
     collectSDM().forEach((s) => {
       record["SDM " + s.peran + " (jumlah)"] = s.jml;
-      s.names.forEach((n, i) => {
-        record["SDM " + s.peran + " - Nama " + (i + 1)] = n.nama;
-        if (n.link) record["SK " + s.peran + " (" + n.nama + ")"] = n.link;
-      });
+      record["SDM " + s.peran + " (daftar nama)"] = s.names.join(", ");
+      if (s.link) record["SK " + s.peran] = s.link;
     });
     // Issue paket (hanya yang diisi); kalau tak ada issue -> tak ada kolom issue
     collectIssues().forEach((it, i) => {
@@ -1314,13 +1308,19 @@ function getMitraFiltered() {
   if (fp && fp !== "Semua") raw = raw.filter((r) => keyFromStored(r["Program"]) === fp);
   if (fb && fb !== "Semua") raw = raw.filter((r) => monthLabel(r["Tanggal Kegiatan"]) === fb);
   const mitra = [];
+  const addMitra = (nama, prog, logo) => {
+    const nm = String(nama || "").trim();
+    if (nm && !mitra.some((x) => x.nama.toLowerCase() === nm.toLowerCase())) mitra.push({ nama: nm, logo: logo || "", prog: prog });
+  };
   raw.forEach((r) => {
+    const prog = labelFromStored(r["Program"]);
+    const logoRole = driveThumb(r["SK Mitra"] || "");   // SK per peran (baru)
     Object.keys(r).forEach((k) => {
-      if (/^SDM Mitra - Nama \d+$/.test(k) && String(r[k] || "").trim()) {
+      if (/^SDM Mitra \(daftar nama\)$/.test(k)) {
+        String(r[k] || "").split(/[\n,;]+/).forEach((nm) => addMitra(nm, prog, logoRole));
+      } else if (/^SDM Mitra - Nama \d+$/.test(k) && String(r[k] || "").trim()) {
         const nama = String(r[k]).trim();
-        const logo = driveThumb(r["SK Mitra (" + nama + ")"] || "");
-        const prog = labelFromStored(r["Program"]);
-        if (!mitra.some((x) => x.nama === nama)) mitra.push({ nama, logo, prog });
+        addMitra(nama, prog, driveThumb(r["SK Mitra (" + nama + ")"] || "") || logoRole);
       }
     });
   });
