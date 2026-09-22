@@ -337,3 +337,9 @@ tbody tr:nth-child(even){background:#F8FAFD}
   font-size:1.3rem;display:flex;align-items:center;justify-content:center}
 .mitra-nm{font-size:.82rem;font-weight:700;color:#1A2233;text-align:center;line-height:1.2}
 .mitra-nm small{display:block;font-weight:500;color:#6B7688;font-size:.7rem}
+
+/* SDM: textarea daftar nama */
+.sdm-block .s-names{width:100%;resize:vertical;min-height:70px;font-family:inherit;font-size:.85rem;
+  border:1px solid #E5EAF2;border-radius:9px;padding:.5rem}
+.sdm-sk-row{display:flex;align-items:center;gap:8px;margin:.4rem 0}
+.sdm-sk-row .s-status{font-size:.75rem;color:#16A34A}
