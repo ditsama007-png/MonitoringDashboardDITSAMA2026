@@ -1390,51 +1390,87 @@ function renderProgFlexTable(key) {
 // Financial: rekap anggaran/realisasi dari DataMasuk (kolom yang mengandung 'Anggaran'/'Realisasi')
 function renderFinancial() {
   const fin = FIN_CACHE || { rows: [] };
+  // ringkasan per program
   const perProg = {};
   fin.rows.forEach((r) => {
     const prog = labelFromStored(r["Program"]);
-    perProg[prog] = perProg[prog] || { ang: 0, real: 0 };
-    perProg[prog].ang += num(r["Anggaran"]);
-    perProg[prog].real += num(r["Realisasi"]);
+    if (!perProg[prog]) perProg[prog] = { pks: 0, dpks: 0, ajuan: 0, saldo: 0 };
+    const tipe = String(r["Tipe"] || "");
+    if (tipe === "PKS Awal" || tipe === "Penambahan PKS") {
+      perProg[prog].pks += num(r["Nilai PKS"]); perProg[prog].dpks += num(r["DPKS"]);
+    } else if (tipe === "Pengajuan") { perProg[prog].ajuan += num(r["Nilai Pengajuan"]); }
   });
-  let totA = 0, totR = 0;
-  Object.keys(perProg).forEach((p) => { totA += perProg[p].ang; totR += perProg[p].real; });
-  if ($("fin-anggaran")) $("fin-anggaran").textContent = fmtRupiah(totA);
-  if ($("fin-realisasi")) $("fin-realisasi").textContent = fmtRupiah(totR);
-  if ($("fin-sisa")) $("fin-sisa").textContent = fmtRupiah(totA - totR);
-  if ($("fin-serap")) $("fin-serap").textContent = totA > 0 ? Math.round(totR / totA * 100) + "%" : "0%";
+  // saldo per program = (pks - dpks) - ajuan  (= saldo berjalan terakhir)
+  Object.keys(perProg).forEach((p) => { perProg[p].saldo = (perProg[p].pks - perProg[p].dpks) - perProg[p].ajuan; });
 
-  // dropdown program di form (yang boleh diakses)
-  const sel = $("fin-program");
-  if (sel && !sel.options.length) {
-    const canAll = SESSION && (isAllAccess(SESSION.jabatan) || isFinanceOnly(SESSION.jabatan));
-    const allowed = canAll ? PROGRAMS : PROGRAMS.filter((p) => canAccessProgram(p.key));
-    sel.innerHTML = (allowed.length ? allowed : PROGRAMS).map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
-  }
+  let tPks = 0, tDpks = 0, tAjuan = 0, tSaldo = 0;
+  Object.keys(perProg).forEach((p) => { tPks += perProg[p].pks; tDpks += perProg[p].dpks; tAjuan += perProg[p].ajuan; tSaldo += perProg[p].saldo; });
+  const dasar = tPks - tDpks;   // dana yang bisa dipakai
+  if ($("fin-pks")) $("fin-pks").textContent = fmtRupiah(tPks);
+  if ($("fin-dpks")) $("fin-dpks").textContent = fmtRupiah(tDpks);
+  if ($("fin-pengajuan")) $("fin-pengajuan").textContent = fmtRupiah(tAjuan);
+  if ($("fin-saldo")) $("fin-saldo").textContent = fmtRupiah(tSaldo);
+  if ($("fin-serap")) $("fin-serap").textContent = dasar > 0 ? Math.round(tAjuan / dasar * 100) + "%" : "0%";
 
+  // dropdown program di kedua form
+  ["fp-program", "fg-program"].forEach((id) => {
+    const sel = $(id);
+    if (sel && !sel.options.length) {
+      const canAll = SESSION && (isAllAccess(SESSION.jabatan) || isFinanceOnly(SESSION.jabatan));
+      const allowed = canAll ? PROGRAMS : PROGRAMS.filter((p) => canAccessProgram(p.key));
+      sel.innerHTML = (allowed.length ? allowed : PROGRAMS).map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
+    }
+  });
+
+  // tabel data keuangan (semua baris, dgn saldo berjalan)
   const thead = document.querySelector("#fin-table thead");
   const tbody = document.querySelector("#fin-table tbody");
-  if (thead) thead.innerHTML = "<tr><th>Program</th><th>Anggaran</th><th>Realisasi</th><th>Sisa</th><th>% Serapan</th></tr>";
-  const keys = Object.keys(perProg);
+  const cols = ["Waktu Input", "Program", "PIC", "Tipe", "Jenis PKS", "Nilai PKS", "DPKS", "No Invoice", "Tanggal", "Uraian", "Nilai Pengajuan", "Saldo Berjalan"];
+  if (thead) thead.innerHTML = "<tr>" + cols.map((c) => `<th>${c}</th>`).join("") + "</tr>";
   if (tbody) {
-    if (!keys.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">Belum ada data keuangan. Klik "Input Keuangan" untuk menambah.</td></tr>'; return; }
-    tbody.innerHTML = keys.map((p) => {
-      const a = perProg[p].ang, rl = perProg[p].real;
-      const serap = a > 0 ? Math.round(rl / a * 100) + "%" : "0%";
-      return `<tr><td>${p}</td><td>${fmtRupiah(a)}</td><td>${fmtRupiah(rl)}</td><td>${fmtRupiah(a - rl)}</td><td>${serap}</td></tr>`;
+    if (!fin.rows.length) { tbody.innerHTML = `<tr><td colspan="${cols.length}" class="empty">Belum ada data keuangan.</td></tr>`; }
+    else tbody.innerHTML = fin.rows.map((r) => "<tr>" + cols.map((c) => {
+      let v = r[c]; if (v === undefined || v === null) v = "";
+      if (["Nilai PKS", "DPKS", "Nilai Pengajuan", "Saldo Berjalan"].includes(c) && v !== "") v = fmtRupiah(num(v));
+      if (c === "Program") v = labelFromStored(v);
+      if (c === "Tanggal") v = v ? fmtTanggal(v) : "";
+      return `<td>${v}</td>`;
+    }).join("") + "</tr>").join("");
+  }
+
+  // ringkasan per program
+  const sthead = document.querySelector("#fin-summary thead");
+  const stbody = document.querySelector("#fin-summary tbody");
+  if (sthead) sthead.innerHTML = "<tr><th>Program</th><th>Total PKS</th><th>DPKS</th><th>Pengajuan</th><th>Saldo</th><th>% Serapan</th></tr>";
+  if (stbody) {
+    const keys = Object.keys(perProg);
+    if (!keys.length) { stbody.innerHTML = '<tr><td colspan="6" class="empty">Belum ada data.</td></tr>'; }
+    else stbody.innerHTML = keys.map((p) => {
+      const o = perProg[p]; const base = o.pks - o.dpks;
+      const serap = base > 0 ? Math.round(o.ajuan / base * 100) + "%" : "0%";
+      return `<tr><td>${p}</td><td>${fmtRupiah(o.pks)}</td><td>${fmtRupiah(o.dpks)}</td><td>${fmtRupiah(o.ajuan)}</td><td>${fmtRupiah(o.saldo)}</td><td>${serap}</td></tr>`;
     }).join("");
   }
 }
 
-async function simpanFinancial() {
-  const msg = $("fin-msg"); msg.textContent = ""; msg.className = "save-msg";
+// hitung DPKS otomatis di form PKS
+function updateDPKS() {
+  const nilai = num($("fp-nilai") ? $("fp-nilai").value : 0);
+  const persen = $("fp-jenispks") && $("fp-jenispks").value === "Dm" ? 20 : 10;
+  if ($("fp-dpks")) $("fp-dpks").value = nilai > 0 ? fmtRupiah(Math.round(nilai * persen / 100)) : "";
+}
+
+async function simpanPKS() {
+  const msg = $("fp-msg"); msg.textContent = ""; msg.className = "save-msg";
   if (!SESSION) { msg.textContent = "Belum login."; msg.classList.add("err"); return; }
-  const program = $("fin-program").value;
+  const program = $("fp-program").value;
+  const jenis = $("fp-jenispks").value;
+  const persen = jenis === "Dm" ? 20 : 10;
   const record = {
-    Program: program, Kategori: $("fin-kategori").value.trim(), Uraian: $("fin-uraian").value.trim(),
-    Anggaran: $("fin-in-anggaran").value, Realisasi: $("fin-in-realisasi").value, Keterangan: $("fin-ket").value.trim(),
+    Tipe: $("fp-tipe").value, "Jenis PKS": jenis, "Persen DPKS": persen,
+    "Nilai PKS": $("fp-nilai").value, "Tanggal": $("fp-tanggal").value, "Keterangan": $("fp-ket").value.trim(),
   };
-  if (!record.Anggaran && !record.Realisasi) { msg.textContent = "Isi Anggaran/Realisasi."; msg.classList.add("err"); return; }
+  if (!num(record["Nilai PKS"])) { msg.textContent = "Isi Nilai PKS."; msg.classList.add("err"); return; }
   if (!API_URL) { msg.textContent = "Mode contoh — belum ke Sheets."; msg.classList.add("ok"); return; }
   msg.textContent = "Menyimpan...";
   try {
@@ -1442,8 +1478,32 @@ async function simpanFinancial() {
       body: JSON.stringify({ action: "write_fin", token: SESSION.token, program: program, record: record }) });
     const out = await res.json();
     if (out.ok) {
-      msg.textContent = "✅ Tersimpan ke sheet Financial."; msg.classList.add("ok");
-      ["fin-kategori", "fin-uraian", "fin-ket", "fin-in-anggaran", "fin-in-realisasi"].forEach((id) => { if ($(id)) $(id).value = ""; });
+      msg.textContent = "✅ Tersimpan. Saldo: " + fmtRupiah(out.saldo || 0); msg.classList.add("ok");
+      ["fp-nilai", "fp-dpks", "fp-tanggal", "fp-ket"].forEach((id) => { if ($(id)) $(id).value = ""; });
+      await loadFin(); renderFinancial();
+    } else { msg.textContent = "❌ " + (out.error || "Gagal."); msg.classList.add("err"); }
+  } catch (e) { msg.textContent = "❌ Gagal terhubung."; msg.classList.add("err"); }
+}
+
+async function simpanPengajuan() {
+  const msg = $("fg-msg"); msg.textContent = ""; msg.className = "save-msg";
+  if (!SESSION) { msg.textContent = "Belum login."; msg.classList.add("err"); return; }
+  const program = $("fg-program").value;
+  const record = {
+    Tipe: "Pengajuan", "No Invoice": $("fg-invoice").value.trim(), "Tanggal": $("fg-tanggal").value,
+    "Jenis Pengajuan": $("fg-jenis").value.trim(), "Uraian": $("fg-uraian").value.trim(),
+    "Nilai Pengajuan": $("fg-nilai").value,
+  };
+  if (!num(record["Nilai Pengajuan"])) { msg.textContent = "Isi Nilai Pengajuan."; msg.classList.add("err"); return; }
+  if (!API_URL) { msg.textContent = "Mode contoh — belum ke Sheets."; msg.classList.add("ok"); return; }
+  msg.textContent = "Mengirim...";
+  try {
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "write_fin", token: SESSION.token, program: program, record: record }) });
+    const out = await res.json();
+    if (out.ok) {
+      msg.textContent = "✅ Terkirim. Saldo: " + fmtRupiah(out.saldo || 0); msg.classList.add("ok");
+      ["fg-invoice", "fg-tanggal", "fg-jenis", "fg-uraian", "fg-nilai"].forEach((id) => { if ($(id)) $(id).value = ""; });
       await loadFin(); renderFinancial();
     } else { msg.textContent = "❌ " + (out.error || "Gagal."); msg.classList.add("err"); }
   } catch (e) { msg.textContent = "❌ Gagal terhubung."; msg.classList.add("err"); }
@@ -1809,11 +1869,11 @@ async function init() {
     const b = $("btn-refresh-flex"); const t = b.textContent; b.textContent = "⏳ Memuat...";
     await loadFlex(); renderFlexTable($("in-program").value); b.textContent = t;
   });
-  if ($("fin-show-form")) $("fin-show-form").addEventListener("click", () => {
-    const f = $("fin-form"); f.hidden = !f.hidden;
-    $("fin-show-form").textContent = f.hidden ? "➕ Input Keuangan" : "✖ Tutup Form";
-  });
-  if ($("fin-simpan")) $("fin-simpan").addEventListener("click", simpanFinancial);
+  if ($("fp-simpan")) $("fp-simpan").addEventListener("click", simpanPKS);
+  if ($("fg-kirim")) $("fg-kirim").addEventListener("click", simpanPengajuan);
+  if ($("fp-nilai")) $("fp-nilai").addEventListener("input", updateDPKS);
+  if ($("fp-jenispks")) $("fp-jenispks").addEventListener("change", updateDPKS);
+  if ($("fin-refresh")) $("fin-refresh").addEventListener("click", async () => { await loadFin(); renderFinancial(); });
   if ($("mitra-toggle")) $("mitra-toggle").addEventListener("click", () => {
     const t = $("mitra-list"); if (t) t.hidden = !t.hidden;
   });
