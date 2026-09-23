@@ -273,7 +273,11 @@ tbody tr:nth-child(even){background:#F8FAFD}
 .nav-item{position:relative;display:flex;justify-content:space-between;align-items:center;}
 .nav-badge{background:#DC2626;color:#fff;font-size:.7rem;font-weight:800;border-radius:5px;
   min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;margin-left:6px}
+.nav-badge.red{background:#DC2626;color:#fff}
+.nav-badge.yellow{background:#F5B301;color:#3A2E00}
 .notif-badge{background:#DC2626;color:#fff;font-size:.72rem;font-weight:800;border-radius:5px;padding:1px 8px}
+.notif-badge.red{background:#DC2626;color:#fff}
+.notif-badge.yellow{background:#F5B301;color:#3A2E00}
 .ms-row{display:flex;justify-content:space-between;align-items:center;gap:10px;
   border:1px solid #E5EAF2;border-radius:9px;padding:.5rem .7rem;margin-bottom:6px}
 .status-badge{font-size:.7rem;font-weight:700;border-radius:6px;padding:2px 8px;white-space:nowrap}
