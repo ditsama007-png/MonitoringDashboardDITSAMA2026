@@ -795,6 +795,7 @@ function upcomingMilestones(key) {
   return flex.rows.filter((r) => {
     const p = String(r["Program"] || "");
     if (!(p === key || p === label)) return false;
+    if (String(r["Status Manual"] || "").toLowerCase() === "selesai") return false;
     if (String(r["Mode"] || "") !== "Upcoming Milestone") return false;
     const t = r["Tanggal Kegiatan"];
     if (!t) return true;
@@ -819,9 +820,11 @@ function ongoingItems(key) {
 //  On-Going  : H-2 <= hari ini <= H+7
 //  Selesai   : hari ini > H+7
 function statusOf(r) {
+  // override manual (tombol "Selesai")
+  if (String(r["Status Manual"] || "").toLowerCase() === "selesai") return "Selesai";
   const t = r["Tanggal Kegiatan"];
   if (!t) return String(r["Mode"] || "") === "Upcoming Milestone" ? "Upcoming" : "On-Going";
-  const d = new Date(t); if (isNaN(d)) return "On-Going";
+  const d = parseTgl(t); if (!d) return "On-Going";
   const now = new Date(); now.setHours(0, 0, 0, 0);
   const from = new Date(d); from.setDate(from.getDate() - 2);
   const to = new Date(d); to.setDate(to.getDate() + 7);
@@ -845,7 +848,8 @@ function renderProgramMilestones(key) {
       '<div class="sub">📅 ' + tg + '</div></div>' +
       '<div style="white-space:nowrap;">' +
       '<button class="mini-btn ok ms-fill" data-id="' + id + '">✍ Isi data</button> ' +
-      '<button class="mini-btn ms-edit" data-id="' + id + '">✎ Edit</button></div></div>';
+      '<button class="mini-btn ms-done" data-id="' + id + '" style="background:#16A34A;color:#fff;border-color:#16A34A;">✅ Selesai</button> ' +
+      '<button class="mini-btn ms-del" data-id="' + id + '" style="background:#DC2626;color:#fff;border-color:#DC2626;">🗑 Hapus</button></div></div>';
   };
 
   let html = "";
@@ -866,12 +870,39 @@ function renderProgramMilestones(key) {
   host.innerHTML = html;
 
   const all = ongoing.concat(upcoming);
-  host.querySelectorAll(".ms-fill, .ms-edit").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const row = all.find((x) => String(x["ID"]) === btn.dataset.id);
-      if (row) { gotoInputForMilestone(key); fillMilestone(row); }
-    });
-  });
+  const findRow = (id) => all.find((x) => String(x["ID"]) === id);
+  host.querySelectorAll(".ms-fill").forEach((btn) => btn.addEventListener("click", () => {
+    const row = findRow(btn.dataset.id); if (row) { gotoInputForMilestone(key); fillMilestone(row); }
+  }));
+  host.querySelectorAll(".ms-done").forEach((btn) => btn.addEventListener("click", () => markSelesai(btn.dataset.id, key)));
+  host.querySelectorAll(".ms-del").forEach((btn) => btn.addEventListener("click", () => hapusMilestone(btn.dataset.id, key)));
+}
+
+// tandai kegiatan Selesai (Status Manual = Selesai)
+async function markSelesai(id, key) {
+  if (!id || !SESSION) return;
+  if (!API_URL) { alert("Mode contoh — tidak terhubung ke Sheets."); return; }
+  try {
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "update_flex", token: SESSION.token, id: id, record: { "Status Manual": "Selesai" } }) });
+    const out = await res.json();
+    if (out.ok) { await loadFlex(); renderProgramMilestones(key); renderNavBadges(); renderProgramDash(key); renderGantt(key); renderProgFlexTable(key); }
+    else alert("Gagal: " + (out.error || ""));
+  } catch (e) { alert("Gagal terhubung."); }
+}
+
+// hapus baris kegiatan (dengan konfirmasi)
+async function hapusMilestone(id, key) {
+  if (!id || !SESSION) return;
+  if (!confirm("Hapus kegiatan ini secara permanen dari data? Tindakan ini tidak bisa dibatalkan.")) return;
+  if (!API_URL) { alert("Mode contoh — tidak terhubung ke Sheets."); return; }
+  try {
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "delete_flex", token: SESSION.token, id: id }) });
+    const out = await res.json();
+    if (out.ok) { await loadFlex(); renderProgramMilestones(key); renderNavBadges(); renderProgramDash(key); renderGantt(key); renderProgFlexTable(key); }
+    else alert("Gagal: " + (out.error || ""));
+  } catch (e) { alert("Gagal terhubung."); }
 }
 
 // badge notif jumlah milestone di tiap menu program
