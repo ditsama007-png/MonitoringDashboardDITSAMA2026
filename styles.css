@@ -90,9 +90,9 @@ tbody tr:nth-child(even){background:#F8FAFD}
 
 /* banner + kpi + cards */
 .banner{background:#EAF1FB;border:1px solid #C7D9F0;color:#274B86;border-radius:10px;padding:.6rem .9rem;font-size:.85rem;margin-bottom:1rem}
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.8rem;margin-bottom:1rem}
-.kpi{background:#fff;border:2px solid var(--blue);border-radius:18px;padding:.9rem;text-align:center}
-.kpi-val{font-size:1.6rem;font-weight:800;color:var(--navy)}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:.8rem;margin-bottom:1rem}
+.kpi{background:#fff;border:2px solid var(--blue);border-radius:18px;padding:.85rem .6rem;text-align:center;min-width:0}
+.kpi-val{font-size:clamp(1rem,1.15vw + .55rem,1.45rem);font-weight:800;color:var(--navy);line-height:1.15;overflow-wrap:anywhere;letter-spacing:-.3px}
 .kpi-lab{font-size:.75rem;color:var(--muted);margin-top:.2rem}
 .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:1rem;margin-bottom:1rem}
 .card h3{margin:0 0 .1rem;font-size:1rem}
