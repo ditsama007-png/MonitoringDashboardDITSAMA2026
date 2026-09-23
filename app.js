@@ -1081,7 +1081,7 @@ async function loadFin() {
     const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action: "read_fin" }) });
     const out = await res.json();
-    if (out.ok) FIN_CACHE = { rows: out.rows || [] };
+    if (out.ok) FIN_CACHE = { rows: out.rows || [], saldo: out.saldo || {} };
   } catch (e) { console.error("read_fin gagal:", e); }
 }
 
@@ -1386,30 +1386,49 @@ function renderProgFlexTable(key) {
 
 // Financial: rekap anggaran/realisasi dari DataMasuk (kolom yang mengandung 'Anggaran'/'Realisasi')
 function renderFinancial() {
-  const fin = FIN_CACHE || { rows: [] };
-  // ringkasan per program
+  const fin = FIN_CACHE || { rows: [], saldo: {} };
+  const saldoMap = fin.saldo || {};
+  // tentukan tipe otomatis kalau kosong (data manual)
+  const tipeOf = (r) => {
+    let t = String(r["Tipe"] || "").trim();
+    if (t) return t;
+    if (num(r["Nilai Pengajuan"]) > 0 || r["No Invoice"]) return "Pengajuan";
+    if (num(r["Nilai PKS"]) > 0) return "PKS Awal";
+    return "";
+  };
+
+  // FILTER khusus financial
+  const fp = selValue($("ffl-program")), fb = selValue($("ffl-bulan")), fj = selValue($("ffl-jenis"));
+  let rows = fin.rows.slice();
+  if (fp && fp !== "Semua") rows = rows.filter((r) => labelFromStored(r["Program"]) === fp);
+  if (fb && fb !== "Semua") rows = rows.filter((r) => monthLabel(r["Tanggal"]) === fb);
+  if (fj && fj !== "Semua") rows = rows.filter((r) => String(r["Jenis Pengajuan"] || "") === fj);
+
+  // ringkasan per program (PKS/DPKS/Pengajuan dari data; SALDO dari baris terakhir tab)
   const perProg = {};
   fin.rows.forEach((r) => {
-    const prog = labelFromStored(r["Program"]);
-    if (!perProg[prog]) perProg[prog] = { pks: 0, dpks: 0, ajuan: 0, saldo: 0 };
-    const tipe = String(r["Tipe"] || "");
-    if (tipe === "PKS Awal" || tipe === "Penambahan PKS") {
-      perProg[prog].pks += num(r["Nilai PKS"]); perProg[prog].dpks += num(r["DPKS"]);
-    } else if (tipe === "Pengajuan") { perProg[prog].ajuan += num(r["Nilai Pengajuan"]); }
+    const key = keyFromStored(r["Program"]);
+    const prog = labelOf(key);
+    if (!perProg[prog]) perProg[prog] = { key: key, pks: 0, dpks: 0, ajuan: 0, saldo: 0 };
+    const tipe = tipeOf(r);
+    if (tipe === "PKS Awal" || tipe === "Penambahan PKS") { perProg[prog].pks += num(r["Nilai PKS"]); perProg[prog].dpks += num(r["DPKS"]); }
+    else if (tipe === "Pengajuan") { perProg[prog].ajuan += num(r["Nilai Pengajuan"]); }
   });
-  // saldo per program = (pks - dpks) - ajuan  (= saldo berjalan terakhir)
-  Object.keys(perProg).forEach((p) => { perProg[p].saldo = (perProg[p].pks - perProg[p].dpks) - perProg[p].ajuan; });
+  Object.keys(perProg).forEach((p) => {
+    const k = perProg[p].key;
+    perProg[p].saldo = (saldoMap[k] !== undefined) ? num(saldoMap[k]) : (perProg[p].pks - perProg[p].dpks - perProg[p].ajuan);
+  });
 
   let tPks = 0, tDpks = 0, tAjuan = 0, tSaldo = 0;
   Object.keys(perProg).forEach((p) => { tPks += perProg[p].pks; tDpks += perProg[p].dpks; tAjuan += perProg[p].ajuan; tSaldo += perProg[p].saldo; });
-  const dasar = tPks - tDpks;   // dana yang bisa dipakai
+  const dasar = tPks - tDpks;
   if ($("fin-pks")) $("fin-pks").textContent = fmtRupiah(tPks);
   if ($("fin-dpks")) $("fin-dpks").textContent = fmtRupiah(tDpks);
   if ($("fin-pengajuan")) $("fin-pengajuan").textContent = fmtRupiah(tAjuan);
   if ($("fin-saldo")) $("fin-saldo").textContent = fmtRupiah(tSaldo);
   if ($("fin-serap")) $("fin-serap").textContent = dasar > 0 ? Math.round(tAjuan / dasar * 100) + "%" : "0%";
 
-  // dropdown program di kedua form
+  // dropdown program di kedua form + filter
   ["fp-program", "fg-program"].forEach((id) => {
     const sel = $(id);
     if (sel && !sel.options.length) {
@@ -1418,33 +1437,32 @@ function renderFinancial() {
       sel.innerHTML = (allowed.length ? allowed : PROGRAMS).map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
     }
   });
+  if ($("ffl-program") && !$("ffl-program").options.length)
+    fillSelect($("ffl-program"), ["Semua", ...PROGRAMS.map((p) => p.label)], "Semua");
+  if ($("ffl-bulan")) {
+    const bulan = [...new Set(fin.rows.map((r) => monthLabel(r["Tanggal"])).filter(Boolean))].sort((a, b) => new Date("1 " + a) - new Date("1 " + b));
+    fillSelect($("ffl-bulan"), ["Semua", ...bulan], selValue($("ffl-bulan")) || "Semua");
+  }
+  if ($("ffl-jenis")) {
+    const jenis = [...new Set(fin.rows.map((r) => String(r["Jenis Pengajuan"] || "")).filter(Boolean))].sort();
+    fillSelect($("ffl-jenis"), ["Semua", ...jenis], selValue($("ffl-jenis")) || "Semua");
+  }
 
-  // tabel data keuangan — Saldo Berjalan DIHITUNG ULANG per program (akurat walau diedit manual)
+  // tabel data keuangan (ikut filter) — Saldo dari kolom sheet
   const thead = document.querySelector("#fin-table thead");
   const tbody = document.querySelector("#fin-table tbody");
-  const cols = ["Waktu Input", "Program", "PIC", "Tipe", "Jenis PKS", "Nilai PKS", "DPKS", "No Invoice", "Tanggal", "Uraian", "Nilai Pengajuan", "Saldo Berjalan"];
+  const cols = ["Program", "Tipe", "Nilai PKS", "DPKS", "No Invoice", "Tanggal", "Jenis Pengajuan", "Uraian", "Nilai Pengajuan", "Saldo"];
   if (thead) thead.innerHTML = "<tr>" + cols.map((c) => `<th>${c}</th>`).join("") + "</tr>";
   if (tbody) {
-    if (!fin.rows.length) { tbody.innerHTML = `<tr><td colspan="${cols.length}" class="empty">Belum ada data keuangan.</td></tr>`; }
-    else {
-      const running = {};   // saldo berjalan per program (dihitung urut)
-      tbody.innerHTML = fin.rows.map((r) => {
-        const prog = String(r["Program"] || "");
-        if (running[prog] === undefined) running[prog] = 0;
-        const tipe = String(r["Tipe"] || "");
-        if (tipe === "PKS Awal" || tipe === "Penambahan PKS") running[prog] += num(r["Nilai PKS"]) - num(r["DPKS"]);
-        else if (tipe === "Pengajuan") running[prog] -= num(r["Nilai Pengajuan"]);
-        const saldo = running[prog];
-        return "<tr>" + cols.map((c) => {
-          if (c === "Saldo Berjalan") return `<td><b>${fmtRupiah(saldo)}</b></td>`;
-          let v = r[c]; if (v === undefined || v === null) v = "";
-          if (["Nilai PKS", "DPKS", "Nilai Pengajuan"].includes(c) && v !== "") v = fmtRupiah(num(v));
-          if (c === "Program") v = labelFromStored(v);
-          if (c === "Tanggal") v = v ? fmtTanggal(v) : "";
-          return `<td>${v}</td>`;
-        }).join("") + "</tr>";
-      }).join("");
-    }
+    if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${cols.length}" class="empty">Belum ada data.</td></tr>`; }
+    else tbody.innerHTML = rows.map((r) => "<tr>" + cols.map((c) => {
+      let v = r[c]; if (v === undefined || v === null) v = "";
+      if (["Nilai PKS", "DPKS", "Nilai Pengajuan", "Saldo"].includes(c) && v !== "") v = fmtRupiah(num(v));
+      if (c === "Program") v = labelFromStored(r["Program"]);
+      if (c === "Tipe") v = tipeOf(r);
+      if (c === "Tanggal") v = v ? fmtTanggal(v) : "";
+      return `<td>${v}</td>`;
+    }).join("") + "</tr>").join("");
   }
 
   // ringkasan per program
@@ -1459,6 +1477,37 @@ function renderFinancial() {
       const serap = base > 0 ? Math.round(o.ajuan / base * 100) + "%" : "0%";
       return `<tr><td>${p}</td><td>${fmtRupiah(o.pks)}</td><td>${fmtRupiah(o.dpks)}</td><td>${fmtRupiah(o.ajuan)}</td><td>${fmtRupiah(o.saldo)}</td><td>${serap}</td></tr>`;
     }).join("");
+  }
+
+  renderFinCharts(rows, perProg, tipeOf);
+}
+
+// ===== Grafik Financial =====
+let chartFinBulan = null, chartFinSaldo = null;
+function renderFinCharts(rows, perProg, tipeOf) {
+  if (typeof Chart === "undefined") return;
+  // 1) Realisasi (pengajuan) bulanan
+  const perBulan = {};
+  rows.forEach((r) => { if (tipeOf(r) === "Pengajuan") { const m = monthLabel(r["Tanggal"]); if (m) perBulan[m] = (perBulan[m] || 0) + num(r["Nilai Pengajuan"]); } });
+  const bl = Object.keys(perBulan).sort((a, b) => new Date("1 " + a) - new Date("1 " + b));
+  const c1 = $("fin-chart-bulan");
+  if (c1) {
+    if (chartFinBulan) chartFinBulan.destroy();
+    chartFinBulan = new Chart(c1, { type: "bar",
+      data: { labels: bl.length ? bl : ["(kosong)"], datasets: [{ label: "Realisasi (Rp)", data: bl.map((m) => perBulan[m]), backgroundColor: "#2F6FB0" }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } });
+  }
+  // 2) Anggaran (PKS-DPKS) vs Realisasi per program
+  const c2 = $("fin-chart-prog");
+  if (c2) {
+    const progs = Object.keys(perProg);
+    if (chartFinSaldo) chartFinSaldo.destroy();
+    chartFinSaldo = new Chart(c2, { type: "bar",
+      data: { labels: progs.length ? progs : ["(kosong)"], datasets: [
+        { label: "Dana (PKS−DPKS)", data: progs.map((p) => perProg[p].pks - perProg[p].dpks), backgroundColor: "#9EC1E6" },
+        { label: "Realisasi", data: progs.map((p) => perProg[p].ajuan), backgroundColor: "#2F6FB0" },
+      ] },
+      options: { responsive: true, plugins: { legend: { position: "top" } }, scales: { y: { beginAtZero: true } } } });
   }
 }
 
@@ -1883,6 +1932,7 @@ async function init() {
   if ($("fp-nilai")) $("fp-nilai").addEventListener("input", updateDPKS);
   if ($("fp-jenispks")) $("fp-jenispks").addEventListener("change", updateDPKS);
   if ($("fin-refresh")) $("fin-refresh").addEventListener("click", async () => { await loadFin(); renderFinancial(); });
+  ["ffl-program", "ffl-bulan", "ffl-jenis"].forEach((id) => { if ($(id)) $(id).addEventListener("change", renderFinancial); });
   if ($("mitra-toggle")) $("mitra-toggle").addEventListener("click", () => {
     const t = $("mitra-list"); if (t) t.hidden = !t.hidden;
   });
