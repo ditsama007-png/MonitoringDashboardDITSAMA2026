@@ -473,7 +473,7 @@ function renderPeserta() {
   // Cadangan (data lama): kolom "SDM {peran} - Nama N".
   const perSDMset = {};   // peran -> Set(nama unik, lowercase)
   const addNama = (peran, val) => {
-    String(val || "").split(/[\n,;]+/).forEach((s) => {
+    String(val || "").split(/[\n;]+/).forEach((s) => {
       const nm = s.trim().toLowerCase();
       if (nm) { (perSDMset[peran] = perSDMset[peran] || new Set()).add(nm); }
     });
@@ -592,7 +592,7 @@ function addPesertaRow(kat, ter, had) {
   row.querySelector(".dyn-del").addEventListener("click", () => row.remove());
 }
 function splitNames(text) {
-  return String(text || "").split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+  return String(text || "").split(/[\n;]+/).map((s) => s.trim()).filter(Boolean);
 }
 function addSDMRow(peran, namesText) {
   const box = $("rows-sdm"); if (!box) return;
@@ -724,7 +724,7 @@ async function simpan() {
     });
     collectSDM().forEach((s) => {
       record["SDM " + s.peran + " (jumlah)"] = s.jml;
-      record["SDM " + s.peran + " (daftar nama)"] = s.names.join(", ");
+      record["SDM " + s.peran + " (daftar nama)"] = s.names.join("\n");
       if (s.link) record["SK " + s.peran] = s.link;
     });
     // Issue paket (hanya yang diisi); kalau tak ada issue -> tak ada kolom issue
@@ -1314,7 +1314,7 @@ function getMitraFiltered() {
     const logoRole = driveThumb(r["SK Mitra"] || "");   // SK per peran (baru)
     Object.keys(r).forEach((k) => {
       if (/^SDM Mitra \(daftar nama\)$/.test(k)) {
-        String(r[k] || "").split(/[\n,;]+/).forEach((nm) => addMitra(nm, prog, logoRole));
+        String(r[k] || "").split(/[\n;]+/).forEach((nm) => addMitra(nm, prog, logoRole));
       } else if (/^SDM Mitra - Nama \d+$/.test(k) && String(r[k] || "").trim()) {
         const nama = String(r[k]).trim();
         addMitra(nama, prog, driveThumb(r["SK Mitra (" + nama + ")"] || "") || logoRole);
@@ -1419,20 +1419,32 @@ function renderFinancial() {
     }
   });
 
-  // tabel data keuangan (semua baris, dgn saldo berjalan)
+  // tabel data keuangan — Saldo Berjalan DIHITUNG ULANG per program (akurat walau diedit manual)
   const thead = document.querySelector("#fin-table thead");
   const tbody = document.querySelector("#fin-table tbody");
   const cols = ["Waktu Input", "Program", "PIC", "Tipe", "Jenis PKS", "Nilai PKS", "DPKS", "No Invoice", "Tanggal", "Uraian", "Nilai Pengajuan", "Saldo Berjalan"];
   if (thead) thead.innerHTML = "<tr>" + cols.map((c) => `<th>${c}</th>`).join("") + "</tr>";
   if (tbody) {
     if (!fin.rows.length) { tbody.innerHTML = `<tr><td colspan="${cols.length}" class="empty">Belum ada data keuangan.</td></tr>`; }
-    else tbody.innerHTML = fin.rows.map((r) => "<tr>" + cols.map((c) => {
-      let v = r[c]; if (v === undefined || v === null) v = "";
-      if (["Nilai PKS", "DPKS", "Nilai Pengajuan", "Saldo Berjalan"].includes(c) && v !== "") v = fmtRupiah(num(v));
-      if (c === "Program") v = labelFromStored(v);
-      if (c === "Tanggal") v = v ? fmtTanggal(v) : "";
-      return `<td>${v}</td>`;
-    }).join("") + "</tr>").join("");
+    else {
+      const running = {};   // saldo berjalan per program (dihitung urut)
+      tbody.innerHTML = fin.rows.map((r) => {
+        const prog = String(r["Program"] || "");
+        if (running[prog] === undefined) running[prog] = 0;
+        const tipe = String(r["Tipe"] || "");
+        if (tipe === "PKS Awal" || tipe === "Penambahan PKS") running[prog] += num(r["Nilai PKS"]) - num(r["DPKS"]);
+        else if (tipe === "Pengajuan") running[prog] -= num(r["Nilai Pengajuan"]);
+        const saldo = running[prog];
+        return "<tr>" + cols.map((c) => {
+          if (c === "Saldo Berjalan") return `<td><b>${fmtRupiah(saldo)}</b></td>`;
+          let v = r[c]; if (v === undefined || v === null) v = "";
+          if (["Nilai PKS", "DPKS", "Nilai Pengajuan"].includes(c) && v !== "") v = fmtRupiah(num(v));
+          if (c === "Program") v = labelFromStored(v);
+          if (c === "Tanggal") v = v ? fmtTanggal(v) : "";
+          return `<td>${v}</td>`;
+        }).join("") + "</tr>";
+      }).join("");
+    }
   }
 
   // ringkasan per program
