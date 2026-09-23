@@ -797,9 +797,20 @@ function upcomingMilestones(key) {
     if (!(p === key || p === label)) return false;
     if (String(r["Mode"] || "") !== "Upcoming Milestone") return false;
     const t = r["Tanggal Kegiatan"];
-    if (!t) return true;                       // belum ada tanggal -> tetap upcoming
-    const d = new Date(t); if (isNaN(d)) return true;
-    return d >= now;                           // hanya yang belum lewat
+    if (!t) return true;
+    const d = parseTgl(t); if (!d) return true;
+    return d >= now;
+  });
+}
+// kegiatan berstatus On-Going (H-2..H+7) untuk program tertentu
+function ongoingItems(key) {
+  const label = labelOf(key);
+  const flex = FLEX_CACHE || { rows: [] };
+  return flex.rows.filter((r) => {
+    const p = String(r["Program"] || "");
+    if (!(p === key || p === label)) return false;
+    const std = flexToStd(r);
+    return std.status === "On-Going";
   });
 }
 
@@ -822,26 +833,42 @@ function statusOf(r) {
 // kartu Upcoming Milestone di halaman program
 function renderProgramMilestones(key) {
   const host = $("prog-milestones"); if (!host) return;
-  const items = upcomingMilestones(key);
-  if (!items.length) { host.innerHTML = ""; return; }
-  host.innerHTML =
-    '<div class="card">' +
-    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
-      '<h3 style="margin:0;">Upcoming Milestone</h3>' +
-      '<span class="notif-badge">' + items.length + '</span></div>' +
-    items.map((r) => {
-      const nm = r["Nama Kegiatan"] || "(tanpa nama)";
-      const tg = r["Tanggal Kegiatan"] || "(belum ada tanggal)";
-      const id = r["ID"] || "";
-      return '<div class="ms-row"><div><b>' + nm + '</b>' +
-        '<div class="sub">📅 ' + tg + '</div></div>' +
-        '<div style="white-space:nowrap;">' +
-        '<button class="mini-btn ok ms-fill" data-id="' + id + '">✍ Isi data</button> ' +
-        '<button class="mini-btn ms-edit" data-id="' + id + '">✎ Edit</button></div></div>';
-    }).join("") + '</div>';
+  const ongoing = ongoingItems(key);
+  const upcoming = upcomingMilestones(key);
+  if (!ongoing.length && !upcoming.length) { host.innerHTML = ""; return; }
+
+  const rowHtml = (r) => {
+    const nm = r["Nama Kegiatan"] || "(tanpa nama)";
+    const tg = r["Tanggal Kegiatan"] ? fmtTanggal(r["Tanggal Kegiatan"]) : "(belum ada tanggal)";
+    const id = r["ID"] || "";
+    return '<div class="ms-row"><div><b>' + nm + '</b>' +
+      '<div class="sub">📅 ' + tg + '</div></div>' +
+      '<div style="white-space:nowrap;">' +
+      '<button class="mini-btn ok ms-fill" data-id="' + id + '">✍ Isi data</button> ' +
+      '<button class="mini-btn ms-edit" data-id="' + id + '">✎ Edit</button></div></div>';
+  };
+
+  let html = "";
+  if (ongoing.length) {
+    html += '<div class="card">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
+        '<h3 style="margin:0;">Sedang Berlangsung (On-Going)</h3>' +
+        '<span class="notif-badge red">' + ongoing.length + '</span></div>' +
+      ongoing.map(rowHtml).join("") + '</div>';
+  }
+  if (upcoming.length) {
+    html += '<div class="card">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
+        '<h3 style="margin:0;">Upcoming Milestone</h3>' +
+        '<span class="notif-badge yellow">' + upcoming.length + '</span></div>' +
+      upcoming.map(rowHtml).join("") + '</div>';
+  }
+  host.innerHTML = html;
+
+  const all = ongoing.concat(upcoming);
   host.querySelectorAll(".ms-fill, .ms-edit").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const row = items.find((x) => String(x["ID"]) === btn.dataset.id);
+      const row = all.find((x) => String(x["ID"]) === btn.dataset.id);
       if (row) { gotoInputForMilestone(key); fillMilestone(row); }
     });
   });
@@ -852,12 +879,17 @@ function renderNavBadges() {
   document.querySelectorAll('.nav-item[data-view]').forEach((btn) => {
     const v = btn.dataset.view;
     if (v === "dashboard" || v === "input") return;
-    let badge = btn.querySelector(".nav-badge");
-    const n = upcomingMilestones(v).length;
-    if (n > 0) {
-      if (!badge) { badge = document.createElement("span"); badge.className = "nav-badge"; btn.appendChild(badge); }
-      badge.textContent = n;
-    } else if (badge) { badge.remove(); }
+    // bersihkan badge lama
+    btn.querySelectorAll(".nav-badge").forEach((b) => b.remove());
+    const nUp = upcomingMilestones(v).length;
+    const nOn = ongoingItems(v).length;
+    // on-going (merah) dulu, lalu upcoming (kuning)
+    if (nOn > 0) {
+      const b = document.createElement("span"); b.className = "nav-badge red"; b.textContent = nOn; b.title = "On-Going"; btn.appendChild(b);
+    }
+    if (nUp > 0) {
+      const b = document.createElement("span"); b.className = "nav-badge yellow"; b.textContent = nUp; b.title = "Upcoming"; btn.appendChild(b);
+    }
   });
 }
 
