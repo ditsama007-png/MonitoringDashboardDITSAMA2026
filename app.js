@@ -1483,33 +1483,7 @@ function renderFinancial() {
 }
 
 // ===== Grafik Financial =====
-let chartFinBulan = null, chartFinSaldo = null;
-function renderFinCharts(rows, perProg, tipeOf) {
-  if (typeof Chart === "undefined") return;
-  // 1) Realisasi (pengajuan) bulanan
-  const perBulan = {};
-  rows.forEach((r) => { if (tipeOf(r) === "Pengajuan") { const m = monthLabel(r["Tanggal"]); if (m) perBulan[m] = (perBulan[m] || 0) + num(r["Nilai Pengajuan"]); } });
-  const bl = Object.keys(perBulan).sort((a, b) => new Date("1 " + a) - new Date("1 " + b));
-  const c1 = $("fin-chart-bulan");
-  if (c1) {
-    if (chartFinBulan) chartFinBulan.destroy();
-    chartFinBulan = new Chart(c1, { type: "bar",
-      data: { labels: bl.length ? bl : ["(kosong)"], datasets: [{ label: "Realisasi (Rp)", data: bl.map((m) => perBulan[m]), backgroundColor: "#2F6FB0" }] },
-      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } } });
-  }
-  // 2) Anggaran (PKS-DPKS) vs Realisasi per program
-  const c2 = $("fin-chart-prog");
-  if (c2) {
-    const progs = Object.keys(perProg);
-    if (chartFinSaldo) chartFinSaldo.destroy();
-    chartFinSaldo = new Chart(c2, { type: "bar",
-      data: { labels: progs.length ? progs : ["(kosong)"], datasets: [
-        { label: "Dana (PKS−DPKS)", data: progs.map((p) => perProg[p].pks - perProg[p].dpks), backgroundColor: "#9EC1E6" },
-        { label: "Realisasi", data: progs.map((p) => perProg[p].ajuan), backgroundColor: "#2F6FB0" },
-      ] },
-      options: { responsive: true, plugins: { legend: { position: "top" } }, scales: { y: { beginAtZero: true } } } });
-  }
-}
+
 
 // hitung DPKS otomatis di form PKS
 function updateDPKS() {
