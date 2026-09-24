@@ -962,8 +962,81 @@ function fillMilestone(row) {
 }
 function toDateInput(v) {
   if (!v) return "";
-  const d = new Date(v); if (isNaN(d)) return "";
-  return d.toISOString().slice(0, 10);
+  const d = parseTgl(v); if (!d) return "";
+  const mm = String(d.getMonth() + 1).padStart(2, "0"), dd = String(d.getDate()).padStart(2, "0");
+  return d.getFullYear() + "-" + mm + "-" + dd;
+}
+
+// Edit sebuah baris DataMasuk lewat FORM pengisian (bukan inline tabel)
+function editInForm(r, key) {
+  const prog = keyFromStored(r["Program"]) || key;
+  gotoInputForMilestone(prog);
+  const ff = $("form-fields"); if (ff) ff.hidden = false;
+  if ($("btn-show-form")) $("btn-show-form").textContent = "✖ Tutup Form";
+  clearForm();
+  EDIT_ID = r["ID"] || null;
+
+  // identitas
+  if ($("f-pic")) $("f-pic").value = r["PIC"] || (SESSION ? SESSION.nama : "");
+  if ($("f-tanggal")) $("f-tanggal").value = toDateInput(r["Tanggal Kegiatan"]);
+  if ($("f-kegiatan")) $("f-kegiatan").value = r["Nama Kegiatan"] || "";
+  if ($("f-fase")) $("f-fase").value = r["Fase Kegiatan"] || "";
+  if ($("f-lokasi")) $("f-lokasi").value = r["Lokasi / Alamat"] || "";
+
+  // mode
+  const isMilestone = String(r["Mode"] || "") === "Upcoming Milestone";
+  setInputMode(isMilestone ? "milestone" : "ongoing");
+
+  if (!isMilestone) {
+    // peserta: dari kolom "Peserta X (terdaftar)/(hadir)"
+    if ($("rows-peserta")) $("rows-peserta").innerHTML = "";
+    const kat = {};
+    Object.keys(r).forEach((k) => {
+      let m = /^Peserta (.+) \(terdaftar\)$/.exec(k);
+      if (m) { (kat[m[1]] = kat[m[1]] || {}).ter = r[k]; }
+      m = /^Peserta (.+) \(hadir\)$/.exec(k);
+      if (m) { (kat[m[1]] = kat[m[1]] || {}).had = r[k]; }
+    });
+    Object.keys(kat).forEach((nm) => { if (String(kat[nm].ter || "") !== "" || String(kat[nm].had || "") !== "") addPesertaRow(nm, kat[nm].ter, kat[nm].had); });
+    if (!$("rows-peserta").children.length) { addPesertaRow(""); }
+
+    // SDM: dari "SDM {peran} (daftar nama)"
+    if ($("rows-sdm")) $("rows-sdm").innerHTML = "";
+    const sdmDone = {};
+    Object.keys(r).forEach((k) => {
+      const m = /^SDM (.+) \(daftar nama\)$/.exec(k);
+      if (m && String(r[k] || "").trim()) {
+        const peran = m[1]; sdmDone[peran] = 1;
+        addSDMRow(peran, splitPeople(r[k]).join("\n"));
+      }
+    });
+    // cadangan: peran dari "- Nama N" bila belum ada daftar nama
+    Object.keys(r).forEach((k) => {
+      const m = /^SDM (.+) - Nama \d+$/.exec(k);
+      if (m && !sdmDone[m[1]] && String(r[k] || "").trim()) {
+        sdmDone[m[1]] = 1;
+        const names = Object.keys(r).filter((x) => new RegExp("^SDM " + m[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + " - Nama \\d+$").test(x)).map((x) => r[x]).filter(Boolean);
+        addSDMRow(m[1], names.join("\n"));
+      }
+    });
+
+    // issue: dari "Issue N Level/Nama/Pihak/Problem Solving"
+    if ($("rows-issue")) $("rows-issue").innerHTML = "";
+    let n = 1;
+    while (r["Issue " + n + " Level"] !== undefined || r["Issue " + n + " Nama"] !== undefined) {
+      const lv = r["Issue " + n + " Level"], nm = r["Issue " + n + " Nama"];
+      if ((lv && String(lv).trim()) || (nm && String(nm).trim()))
+        addIssueRow(nm || "", lv || "", r["Issue " + n + " Pihak (penyelenggara)"] || r["Issue " + n + " Pihak"] || "", r["Issue " + n + " Problem Solving"] || "");
+      n++;
+    }
+
+    // portfolio
+    if ($("f-nilai")) $("f-nilai").value = String(r["Nilai Capaian (%)"] || "").replace(/[^0-9.]/g, "");
+    if ($("f-feedback")) $("f-feedback").value = String(r["Feedback (%)"] || "").replace(/[^0-9.]/g, "");
+    if ($("f-keberjalanan") && r["Keberjalanan Kegiatan"]) $("f-keberjalanan").value = r["Keberjalanan Kegiatan"];
+  }
+
+  if (ff) ff.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 // ------------------------------------------------------------- filters ------
@@ -1241,7 +1314,7 @@ function renderFlexTable(key) {
     tbody.appendChild(tr);
 
     act.querySelector(".del").addEventListener("click", () => hapusRow(r["ID"], key));
-    act.querySelector(".edit").addEventListener("click", () => editRow(tr, r, key));
+    act.querySelector(".edit").addEventListener("click", () => editInForm(r, key));
     const fb = act.querySelector(".fill");
     if (fb) fb.addEventListener("click", () => {
       if (!milestoneActive(r)) { alert("Tombol isi tanggal aktif H-2 sampai H+7 dari tanggal milestone."); return; }
