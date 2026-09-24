@@ -444,6 +444,11 @@ function renderPeserta() {
   const ctx = $("chart-peserta-keg");
   if (ctx && typeof Chart !== "undefined") {
     if (chartPesertaKeg) chartPesertaKeg.destroy();
+    const zoomOpts = (typeof Chart !== "undefined" && Chart.registry && Chart.registry.plugins.get("zoom")) ? {
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, drag: { enabled: false }, mode: "x" },
+      pan: { enabled: true, mode: "x" },
+      limits: { x: { min: "original", max: "original" } },
+    } : undefined;
     chartPesertaKeg = new Chart(ctx, {
       type: "bar",
       data: { labels: kegLabels.length ? kegLabels : ["(belum ada data)"],
@@ -451,8 +456,20 @@ function renderPeserta() {
           { label: "Terdaftar", data: kegTer, backgroundColor: "#9EC1E6" },
           { label: "Hadir", data: kegHad, backgroundColor: "#2F6FB0" },
         ] },
-      options: { responsive: true, plugins: { legend: { position: "top" } }, scales: { y: { beginAtZero: true } } },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: Object.assign({ legend: { position: "top" } }, zoomOpts ? { zoom: zoomOpts } : {}),
+        scales: { y: { beginAtZero: true } } },
     });
+    // tombol reset zoom
+    const wrap = ctx.parentElement;
+    if (wrap && !wrap.querySelector(".zoom-reset")) {
+      const b = document.createElement("button");
+      b.className = "zoom-reset mini-btn"; b.type = "button"; b.textContent = "⟲ Reset zoom";
+      b.style.cssText = "position:absolute;top:4px;right:4px;z-index:2;";
+      b.onclick = () => { if (chartPesertaKeg && chartPesertaKeg.resetZoom) chartPesertaKeg.resetZoom(); };
+      wrap.style.position = "relative";
+      wrap.appendChild(b);
+    }
   }
 
   // tabel per kategori
