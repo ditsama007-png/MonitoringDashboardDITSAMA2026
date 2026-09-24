@@ -1270,6 +1270,7 @@ function renderInput(key) {
 }
 
 let FIN_CACHE = null;
+let FIN_TAB = "";
 async function loadFin() {
   if (!API_URL) { FIN_CACHE = FIN_CACHE || { rows: [] }; return; }
   try {
@@ -1667,17 +1668,30 @@ function renderFinancial() {
     fillSelect($("ffl-jenis"), ["Semua", ...jenis], selValue($("ffl-jenis")) || "Semua");
   }
 
-  // tabel data keuangan (ikut filter) — Saldo dari kolom sheet
+  // ==== TAB PROGRAM di atas tabel (tampilkan 1 program saja) ====
+  const progsWithData = Object.keys(perProg);
+  if (!FIN_TAB || !progsWithData.includes(FIN_TAB)) FIN_TAB = progsWithData[0] || "";
+  const tabHost = $("fin-tabs");
+  if (tabHost) {
+    tabHost.innerHTML = progsWithData.map((p) =>
+      `<button class="prog-tab${p === FIN_TAB ? " active" : ""}" data-prog="${p.replace(/"/g, "&quot;")}">${p}</button>`).join("")
+      || '<span class="sub">Belum ada data.</span>';
+    tabHost.querySelectorAll(".prog-tab").forEach((b) => b.addEventListener("click", () => { FIN_TAB = b.dataset.prog; renderFinancial(); }));
+  }
+  // tabel hanya tampilkan program tab aktif
+  let tableRows = rows;
+  if (FIN_TAB) tableRows = tableRows.filter((r) => labelFromStored(r["Program"]) === FIN_TAB);
+
+  // tabel data keuangan (ikut filter + tab) — Saldo dari kolom sheet
   const thead = document.querySelector("#fin-table thead");
   const tbody = document.querySelector("#fin-table tbody");
-  const cols = ["Program", "Tipe", "Nilai PKS", "DPKS", "No Invoice", "Tanggal", "Jenis Pengajuan", "Uraian", "Nilai Pengajuan", "Saldo"];
+  const cols = ["Tipe", "Nilai PKS", "DPKS", "No Invoice", "Tanggal", "Jenis Pengajuan", "Uraian", "Nilai Pengajuan", "Saldo"];
   if (thead) thead.innerHTML = "<tr>" + cols.map((c) => `<th>${c}</th>`).join("") + "</tr>";
   if (tbody) {
-    if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${cols.length}" class="empty">Belum ada data.</td></tr>`; }
-    else tbody.innerHTML = rows.map((r) => "<tr>" + cols.map((c) => {
+    if (!tableRows.length) { tbody.innerHTML = `<tr><td colspan="${cols.length}" class="empty">Belum ada data untuk ${FIN_TAB || "program ini"}.</td></tr>`; }
+    else tbody.innerHTML = tableRows.map((r) => "<tr>" + cols.map((c) => {
       let v = r[c]; if (v === undefined || v === null) v = "";
       if (["Nilai PKS", "DPKS", "Nilai Pengajuan", "Saldo"].includes(c) && v !== "") v = fmtRupiah(num(v));
-      if (c === "Program") v = labelFromStored(r["Program"]);
       if (c === "Tipe") v = tipeOf(r);
       if (c === "Tanggal") v = v ? fmtTanggal(v) : "";
       return `<td>${v}</td>`;
@@ -2195,6 +2209,11 @@ async function init() {
   if ($("btn-refresh-flex")) $("btn-refresh-flex").addEventListener("click", async () => {
     const b = $("btn-refresh-flex"); const t = b.textContent; b.textContent = "⏳ Memuat...";
     await loadFlex(); renderFlexTable($("in-program").value); b.textContent = t;
+  });
+  if ($("fin-show-form")) $("fin-show-form").addEventListener("click", () => {
+    const w = $("fin-form-wrap"); if (!w) return;
+    w.hidden = !w.hidden;
+    $("fin-show-form").textContent = w.hidden ? "➕ Input Data" : "✖ Tutup Form";
   });
   if ($("fp-simpan")) $("fp-simpan").addEventListener("click", simpanPKS);
   if ($("fg-kirim")) $("fg-kirim").addEventListener("click", simpanPengajuan);
