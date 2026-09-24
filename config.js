@@ -10,10 +10,9 @@ const API_URL = "https://script.google.com/macros/s/AKfycbxY5KmOhafsX1Nij1aerKDI
 const PROGRAMS = [
   { key: "SIAP",          label: "SIAP ITB",           sheet: "SIAP_2026" },
   { key: "INSPIRASI_EDQ", label: "INSPIRASI EduQuest", sheet: "INSPIRASI_Edq2026" },
-  { key: "INSPIRASI_SCD", label: "INSPIRASI SCD",      sheet: "INSPIRASI_Scd2026" },
-  { key: "OSN",           label: "OSN",                sheet: "OSN_2026" },
-  { key: "OPSI",          label: "OPSI",               sheet: "OPSI_2026" },
-  { key: "RISET",         label: "Riset",              sheet: "Riset_2026" },
+  { key: "TORAJA",        label: "Toraja",             sheet: "Toraja_2026" },
+  { key: "YPK",           label: "YPK",                sheet: "YPK_2026" },
+  { key: "TN",            label: "TN (Taruna Nusantara)", sheet: "TN_2026" },
   { key: "BTI",           label: "BTI",                sheet: "BTI_2026" },
   { key: "WIT",           label: "WIT",                sheet: "WIT_2026" },
   { key: "MAUNG",         label: "MAUNG",              sheet: "MAUNG_2026" },
