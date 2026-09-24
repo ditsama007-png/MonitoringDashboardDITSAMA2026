@@ -449,6 +449,8 @@ function renderPeserta() {
       pan: { enabled: true, mode: "x" },
       limits: { x: { min: "original", max: "original" } },
     } : undefined;
+    // batas Y (biar skala tetap, tidak mengecil saat zoom X)
+    const maxY = Math.max(1, ...kegTer, ...kegHad);
     chartPesertaKeg = new Chart(ctx, {
       type: "bar",
       data: { labels: kegLabels.length ? kegLabels : ["(belum ada data)"],
@@ -458,7 +460,7 @@ function renderPeserta() {
         ] },
       options: { responsive: true, maintainAspectRatio: false,
         plugins: Object.assign({ legend: { position: "top" } }, zoomOpts ? { zoom: zoomOpts } : {}),
-        scales: { y: { beginAtZero: true } } },
+        scales: { y: { beginAtZero: true, min: 0, suggestedMax: maxY } } },
     });
     // tombol reset zoom
     const wrap = ctx.parentElement;
