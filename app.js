@@ -515,8 +515,9 @@ function renderIssues(rows) {
     .sort((a, b) => order[a.level] - order[b.level]);
   const el = $("issues-list"); el.innerHTML = "";
   if (!items.length) { el.innerHTML = '<div class="empty">Tidak ada issue. 🎉</div>'; return; }
-  items.slice(0, 8).forEach((r, i) => {
+  items.forEach((r, i) => {
     const wrap = document.createElement("div");
+    if (i >= 3) { wrap.dataset.extra = "1"; wrap.style.display = "none"; }
     wrap.innerHTML =
       `<div class="issue ${r.level.toLowerCase()}">
         <div class="t">${r.ketisu || r.kegiatan || "-"}<small>${labelOf(r._prog)}</small></div>
@@ -533,24 +534,38 @@ function renderIssues(rows) {
     wrap.querySelector(".issue-detail").addEventListener("click", () => { info.hidden = !info.hidden; });
     el.appendChild(wrap);
   });
+  if (items.length > 3) {
+    const btn = document.createElement("button"); btn.className = "see-more"; btn.type = "button";
+    btn.textContent = "Lihat semua (" + items.length + ")";
+    let open = false;
+    btn.onclick = () => { open = !open; el.querySelectorAll('[data-extra="1"]').forEach((x) => x.style.display = open ? "" : "none"); btn.textContent = open ? "Tampilkan lebih sedikit" : "Lihat semua (" + items.length + ")"; };
+    el.appendChild(btn);
+  }
 }
 
 function renderMilestones(rows) {
   const items = rows.filter((r) => (r.jenis || "").trim())
     .filter((r) => r.tanggal)
-    .sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
+    .sort((a, b) => parseTgl(a.tanggal) - parseTgl(b.tanggal));
   const el = $("milestones-list"); el.innerHTML = "";
   if (!items.length) { el.innerHTML = '<div class="empty">Belum ada milestone.</div>'; return; }
-  items.slice(0, 8).forEach((r) => {
+  items.forEach((r, i) => {
     const d = parseTgl(r.tanggal);
-    const day = isNaN(d) ? "--" : d.getDate();
-    const mon = isNaN(d) ? "" : d.toLocaleDateString("id-ID", { month: "short" });
-    el.insertAdjacentHTML("beforeend",
-      `<div class="ms">
-        <div class="d">${day}<br><small>${mon}</small></div>
-        <div class="ti">${r.jenis}<small>${labelOf(r._prog)}</small></div>
-      </div>`);
+    const day = !d ? "--" : d.getDate();
+    const mon = !d ? "" : d.toLocaleDateString("id-ID", { month: "short" });
+    const wrap = document.createElement("div"); wrap.className = "ms";
+    if (i >= 3) { wrap.dataset.extra = "1"; wrap.style.display = "none"; }
+    wrap.innerHTML = `<div class="d">${day}<br><small>${mon}</small></div>
+        <div class="ti">${r.jenis}<small>${labelOf(r._prog)}</small></div>`;
+    el.appendChild(wrap);
   });
+  if (items.length > 3) {
+    const btn = document.createElement("button"); btn.className = "see-more"; btn.type = "button";
+    btn.textContent = "Lihat semua (" + items.length + ")";
+    let open = false;
+    btn.onclick = () => { open = !open; el.querySelectorAll('[data-extra="1"]').forEach((x) => x.style.display = open ? "" : "none"); btn.textContent = open ? "Tampilkan lebih sedikit" : "Lihat semua (" + items.length + ")"; };
+    el.appendChild(btn);
+  }
 }
 
 // ------------------------------------------------------ tabel data form -----
@@ -1506,14 +1521,37 @@ function renderMitra() {
   if (mitra.length > 1) MITRA_TIMER = setInterval(() => { MITRA_IDX = (MITRA_IDX + 1) % mitra.length; paint(); }, 3000);
   renderMitraTable(mitra);
 }
+let MITRA_PAGE = 0;
 function renderMitraTable(mitra) {
   const thead = document.querySelector("#mitra-table thead");
   const tbody = document.querySelector("#mitra-table tbody");
   if (thead) thead.innerHTML = "<tr><th>No</th><th>Nama Mitra</th><th>Program</th><th>Logo</th></tr>";
   if (!tbody) return;
-  if (!mitra.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Belum ada mitra.</td></tr>'; return; }
-  tbody.innerHTML = mitra.map((mt, i) =>
-    `<tr><td>${i + 1}</td><td>${mt.nama}</td><td>${mt.prog}</td><td>${mt.logo ? "✓" : "-"}</td></tr>`).join("");
+  if (!mitra.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Belum ada mitra.</td></tr>'; setMitraNav(0, 0); return; }
+  const per = 5;
+  const pages = Math.ceil(mitra.length / per);
+  if (MITRA_PAGE >= pages) MITRA_PAGE = pages - 1;
+  if (MITRA_PAGE < 0) MITRA_PAGE = 0;
+  const start = MITRA_PAGE * per;
+  const slice = mitra.slice(start, start + per);
+  tbody.innerHTML = slice.map((mt, i) =>
+    `<tr><td>${start + i + 1}</td><td>${mt.nama}</td><td>${mt.prog}</td><td>${mt.logo ? "✓" : "-"}</td></tr>`).join("");
+  setMitraNav(MITRA_PAGE, pages, mitra);
+}
+function setMitraNav(page, pages, mitra) {
+  let nav = $("mitra-tbl-nav");
+  const host = document.querySelector("#mitra-table");
+  if (!nav && host && host.parentElement) {
+    nav = document.createElement("div"); nav.id = "mitra-tbl-nav"; nav.className = "tbl-nav";
+    host.parentElement.appendChild(nav);
+  }
+  if (!nav) return;
+  if (pages <= 1) { nav.innerHTML = ""; return; }
+  nav.innerHTML = '<button class="mini-btn" id="mtp-prev">‹</button>' +
+    '<span style="margin:0 10px;font-weight:600;">' + (page + 1) + ' / ' + pages + '</span>' +
+    '<button class="mini-btn" id="mtp-next">›</button>';
+  $("mtp-prev").onclick = () => { if (MITRA_PAGE > 0) { MITRA_PAGE--; renderMitraTable(mitra); } };
+  $("mtp-next").onclick = () => { if (MITRA_PAGE < pages - 1) { MITRA_PAGE++; renderMitraTable(mitra); } };
 }
 
 function renderProgFlexTable(key) {
