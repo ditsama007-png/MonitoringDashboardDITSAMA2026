@@ -829,6 +829,8 @@ function upcomingMilestones(key) {
     if (!(p === key || p === label)) return false;
     if (String(r["Status Manual"] || "").toLowerCase() === "selesai") return false;
     if (String(r["Mode"] || "") !== "Upcoming Milestone") return false;
+    // jangan tampilkan yang sudah masuk window On-Going (biar tak dobel)
+    if (statusOf(r) === "On-Going") return false;
     const t = r["Tanggal Kegiatan"];
     if (!t) return true;
     const d = parseTgl(t); if (!d) return true;
@@ -925,16 +927,22 @@ async function markSelesai(id, key) {
 
 // hapus baris kegiatan (dengan konfirmasi)
 async function hapusMilestone(id, key) {
-  if (!id || !SESSION) return;
+  if (!id) { alert("Baris ini tidak punya ID, tidak bisa dihapus otomatis. Hapus manual di sheet."); return; }
+  if (!SESSION) { alert("Sesi habis, silakan login ulang."); return; }
   if (!confirm("Hapus kegiatan ini secara permanen dari data? Tindakan ini tidak bisa dibatalkan.")) return;
   if (!API_URL) { alert("Mode contoh — tidak terhubung ke Sheets."); return; }
   try {
     const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action: "delete_flex", token: SESSION.token, id: id }) });
     const out = await res.json();
-    if (out.ok) { await loadFlex(); renderProgramMilestones(key); renderNavBadges(); renderProgramDash(key); renderGantt(key); renderProgFlexTable(key); }
-    else alert("Gagal: " + (out.error || ""));
-  } catch (e) { alert("Gagal terhubung."); }
+    if (out.ok) {
+      await loadFlex();
+      renderProgramMilestones(key); renderNavBadges(); renderProgramDash(key); renderGantt(key); renderProgFlexTable(key);
+      alert("✅ Kegiatan berhasil dihapus.");
+    } else {
+      alert("❌ Gagal hapus: " + (out.error || "tidak diketahui") + "\n\nKemungkinan Code.gs versi lama. Pastikan sudah deploy Code.gs terbaru (ada fungsi delete_flex).");
+    }
+  } catch (e) { alert("❌ Gagal terhubung ke server."); }
 }
 
 // badge notif jumlah milestone di tiap menu program
