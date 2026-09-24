@@ -1726,13 +1726,19 @@ function renderFinCharts(rows, perProg, tipeOf) {
     (realBP[prog] = realBP[prog] || {})[m] = (realBP[prog][m] || 0) + num(r["Nilai Pengajuan"]);
   });
   const bulan = Object.keys(bulanSet).sort(monthSort);
+  // urutkan program: TOTAL kecil di bawah, besar di atas (Chart.js menumpuk dataset pertama paling bawah)
+  const progByTotal = progList.slice().sort((a, b) => {
+    const ta = bulan.reduce((s, m) => s + ((realBP[a] || {})[m] || 0), 0);
+    const tb = bulan.reduce((s, m) => s + ((realBP[b] || {})[m] || 0), 0);
+    return ta - tb;   // kecil dulu -> di bawah
+  });
   const c1 = $("fin-chart-bulan");
   if (c1) {
     if (chartFinBulan) chartFinBulan.destroy();
     chartFinBulan = new Chart(c1, {
       type: "bar",
       data: { labels: bulan.length ? bulan : ["(kosong)"],
-        datasets: progList.map((p, i) => ({ label: p, backgroundColor: PC[i % PC.length], data: bulan.map((m) => Math.round(((realBP[p] || {})[m] || 0) / 1e6)) })) },
+        datasets: progByTotal.map((p) => ({ label: p, backgroundColor: PC[progList.indexOf(p) % PC.length], data: bulan.map((m) => Math.round(((realBP[p] || {})[m] || 0) / 1e6)) })) },
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top" } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, title: { display: true, text: "juta Rp" } } } },
     });
   }
