@@ -347,3 +347,10 @@ tbody tr:nth-child(even){background:#F8FAFD}
   border:1px solid #E5EAF2;border-radius:9px;padding:.5rem}
 .sdm-sk-row{display:flex;align-items:center;gap:8px;margin:.4rem 0}
 .sdm-sk-row .s-status{font-size:.75rem;color:#16A34A}
+
+/* See more & navigasi tabel */
+.see-more{margin-top:8px;width:100%;background:#EEF3FB;color:#1B3A6B;border:1px solid #D6E1F2;
+  border-radius:9px;padding:.5rem;font-weight:600;cursor:pointer;font-size:.85rem}
+.see-more:hover{background:#E2ECFA}
+.tbl-nav{display:flex;align-items:center;justify-content:center;margin-top:8px}
+.tbl-nav .mini-btn{min-width:34px}
