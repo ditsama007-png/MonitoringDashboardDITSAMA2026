@@ -754,7 +754,7 @@ function collectIssues() {
 async function simpan() {
   const msg = $("save-msg"); msg.textContent = ""; msg.className = "save-msg";
   if (!SESSION) { msg.textContent = "Anda belum login."; msg.classList.add("err"); return; }
-  const program = $("in-program").value;
+  const program = resolveProg("in-program", "in-prog-custom");
   if (!canAccessProgram(program)) { msg.textContent = "Anda tak berhak mengisi program ini."; msg.classList.add("err"); return; }
 
   const record = {
@@ -1243,11 +1243,24 @@ function populateInputPrograms() {
   const sel = $("in-program");
   const allowed = PROGRAMS.filter((p) => canAccessProgram(p.key));
   let opts = allowed.map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
-  // Admin & Head Program dapat opsi "Semua Program"
   if (SESSION && isAllAccess(SESSION.jabatan)) {
     opts = '<option value="__ALL__">Semua Program</option>' + opts;
   }
+  // opsi Lainnya (program custom) — untuk Admin/Head
+  if (SESSION && isAllAccess(SESSION.jabatan)) opts += '<option value="__LAINNYA__">Lainnya… (ketik sendiri)</option>';
   sel.innerHTML = opts || '<option value="">(tidak ada program yang bisa Anda isi)</option>';
+  const cust = $("in-prog-custom");
+  if (cust && !sel._wired) {
+    sel._wired = 1;
+    sel.addEventListener("change", () => { cust.hidden = sel.value !== "__LAINNYA__"; if (!cust.hidden) cust.focus(); renderInput(sel.value); });
+    cust.addEventListener("input", () => renderInput("__LAINNYA__"));
+  }
+}
+// nilai program terpilih (menangani Lainnya) untuk sebuah dropdown+custom
+function resolveProg(selId, custId) {
+  const sel = $(selId); if (!sel) return "";
+  if (sel.value === "__LAINNYA__") return ($(custId) ? $(custId).value.trim() : "");
+  return sel.value;
 }
 
 // tampilkan form + pivot + tabel untuk program terpilih di Input Data
@@ -1653,7 +1666,16 @@ function renderFinancial() {
     if (sel && !sel.options.length) {
       const canAll = SESSION && (isAllAccess(SESSION.jabatan) || isFinanceOnly(SESSION.jabatan));
       const allowed = canAll ? PROGRAMS : PROGRAMS.filter((p) => canAccessProgram(p.key));
-      sel.innerHTML = (allowed.length ? allowed : PROGRAMS).map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
+      let html = (allowed.length ? allowed : PROGRAMS).map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
+      if (canAll) html += '<option value="__LAINNYA__">Lainnya… (ketik sendiri)</option>';
+      sel.innerHTML = html;
+    }
+    // wire toggle custom
+    const custId = id + "-custom".replace("program", "prog");
+    const cust = $(id.replace("program", "prog") + "-custom");
+    if (sel && cust && !sel._wired) {
+      sel._wired = 1;
+      sel.addEventListener("change", () => { cust.hidden = sel.value !== "__LAINNYA__"; if (!cust.hidden) cust.focus(); });
     }
   });
   if ($("ffl-program") && !$("ffl-program").options.length)
@@ -1797,16 +1819,16 @@ function renderFinCharts(rows, perProg, tipeOf) {
 // hitung DPKS otomatis di form PKS
 function updateDPKS() {
   const nilai = num($("fp-nilai") ? $("fp-nilai").value : 0);
-  const persen = $("fp-jenispks") && $("fp-jenispks").value === "Dm" ? 20 : 10;
+  const jn = $("fp-jenispks") ? $("fp-jenispks").value : "Pm"; const persen = jn === "Pd" ? 20 : (jn === "DP" ? 0 : 10);
   if ($("fp-dpks")) $("fp-dpks").value = nilai > 0 ? fmtRupiah(Math.round(nilai * persen / 100)) : "";
 }
 
 async function simpanPKS() {
   const msg = $("fp-msg"); msg.textContent = ""; msg.className = "save-msg";
   if (!SESSION) { msg.textContent = "Belum login."; msg.classList.add("err"); return; }
-  const program = $("fp-program").value;
+  const program = resolveProg("fp-program", "fp-prog-custom");
   const jenis = $("fp-jenispks").value;
-  const persen = jenis === "Dm" ? 20 : 10;
+  const persen = jenis === "Pd" ? 20 : (jenis === "DP" ? 0 : 10);
   const record = {
     Tipe: $("fp-tipe").value, "Jenis PKS": jenis, "Persen DPKS": persen,
     "Nilai PKS": $("fp-nilai").value, "Tanggal": $("fp-tanggal").value, "Keterangan": $("fp-ket").value.trim(),
@@ -1829,7 +1851,7 @@ async function simpanPKS() {
 async function simpanPengajuan() {
   const msg = $("fg-msg"); msg.textContent = ""; msg.className = "save-msg";
   if (!SESSION) { msg.textContent = "Belum login."; msg.classList.add("err"); return; }
-  const program = $("fg-program").value;
+  const program = resolveProg("fg-program", "fg-prog-custom");
   const record = {
     Tipe: "Pengajuan", "No Invoice": $("fg-invoice").value.trim(), "Tanggal": $("fg-tanggal").value,
     "Jenis Pengajuan": $("fg-jenis").value.trim(), "Uraian": $("fg-uraian").value.trim(),
