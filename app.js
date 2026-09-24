@@ -473,7 +473,7 @@ function renderPeserta() {
   // Cadangan (data lama): kolom "SDM {peran} - Nama N".
   const perSDMset = {};   // peran -> Set(nama unik, lowercase)
   const addNama = (peran, val) => {
-    String(val || "").split(/[\n;]+/).forEach((s) => {
+    splitPeople(val).forEach((s) => {
       const nm = s.trim().toLowerCase();
       if (nm) { (perSDMset[peran] = perSDMset[peran] || new Set()).add(nm); }
     });
@@ -592,7 +592,24 @@ function addPesertaRow(kat, ter, had) {
   row.querySelector(".dyn-del").addEventListener("click", () => row.remove());
 }
 function splitNames(text) {
-  return String(text || "").split(/[\n;]+/).map((s) => s.trim()).filter(Boolean);
+  return splitPeople(text);
+}
+// Pisah daftar orang: utamakan baris/;, lalu koma — TAPI gabungkan gelar (S.Si, M.T, Ph.D, dst)
+function splitPeople(text) {
+  const out = [];
+  String(text || "").split(/[\n;]+/).forEach((line) => {
+    let cur = "";
+    line.split(",").forEach((part) => {
+      const t = part.trim();
+      if (!t) return;
+      // dianggap gelar kalau: ada titik, tanpa spasi, pendek (≤7) — mis. "S.Si","M.T","Ph.D","S.Kom"
+      const isGelar = /\./.test(t) && !/\s/.test(t) && t.length <= 7;
+      if (isGelar && cur) cur += ", " + t;
+      else { if (cur) out.push(cur); cur = t; }
+    });
+    if (cur) out.push(cur);
+  });
+  return out;
 }
 function addSDMRow(peran, namesText) {
   const box = $("rows-sdm"); if (!box) return;
@@ -1377,7 +1394,7 @@ function getMitraFiltered() {
     const logoRole = driveThumb(r["SK Mitra"] || "");   // SK per peran (baru)
     Object.keys(r).forEach((k) => {
       if (/^SDM Mitra \(daftar nama\)$/.test(k)) {
-        String(r[k] || "").split(/[\n;]+/).forEach((nm) => addMitra(nm, prog, logoRole));
+        splitPeople(r[k]).forEach((nm) => addMitra(nm, prog, logoRole));
       } else if (/^SDM Mitra - Nama \d+$/.test(k) && String(r[k] || "").trim()) {
         const nama = String(r[k]).trim();
         addMitra(nama, prog, driveThumb(r["SK Mitra (" + nama + ")"] || "") || logoRole);
