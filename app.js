@@ -1732,24 +1732,23 @@ function renderFinCharts(rows, perProg, tipeOf) {
     });
   }
 
-  // 2) Saldo per program per bulan (garis, kumulatif)
+  // 2) Saldo per program per bulan (garis)
+  // Ambil nilai kolom "Saldo" pada baris TERAKHIR di bulan itu (saldo aktual di sheet).
+  // Bulan tanpa transaksi -> pakai saldo bulan sebelumnya (carry-forward).
   const c2 = $("fin-chart-saldo");
   if (c2) {
-    const allM = {}; rows.forEach((r) => { const m = monthLabel(r["Tanggal"]); if (m) allM[m] = 1; });
+    const allM = {};
+    rows.forEach((r) => { const m = monthLabel(r["Tanggal"]); if (m) allM[m] = 1; });
     const months = Object.keys(allM).sort(monthSort);
     const datasets = progList.map((p, i) => {
-      let run = 0;
+      let last = null;
       const data = months.map((m) => {
-        rows.forEach((r) => {
-          if (labelOf(keyFromStored(r["Program"])) !== p) return;
-          if (monthLabel(r["Tanggal"]) !== m) return;
-          const t = tipeOf(r);
-          if (t === "PKS Awal" || t === "Penambahan PKS") run += num(r["Nilai PKS"]) - num(r["DPKS"]);
-          else if (t === "Pengajuan") run -= num(r["Nilai Pengajuan"]);
-        });
-        return Math.round(run / 1e6);
+        // cari baris program p di bulan m; ambil Saldo baris terakhir (urutan sheet)
+        const inMonth = rows.filter((r) => labelOf(keyFromStored(r["Program"])) === p && monthLabel(r["Tanggal"]) === m && String(r["Saldo"] || "") !== "");
+        if (inMonth.length) last = num(inMonth[inMonth.length - 1]["Saldo"]);
+        return last === null ? null : Math.round(last / 1e6);
       });
-      return { label: p, data: data, borderColor: PC[i % PC.length], backgroundColor: PC[i % PC.length], fill: false, tension: .3 };
+      return { label: p, data: data, borderColor: PC[i % PC.length], backgroundColor: PC[i % PC.length], fill: false, tension: .3, spanGaps: true };
     });
     if (chartFinSaldo) chartFinSaldo.destroy();
     chartFinSaldo = new Chart(c2, { type: "line",
