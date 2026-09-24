@@ -1658,7 +1658,8 @@ function renderFinancial() {
   if ($("ffl-program") && !$("ffl-program").options.length)
     fillSelect($("ffl-program"), ["Semua", ...PROGRAMS.map((p) => p.label)], "Semua");
   if ($("ffl-bulan")) {
-    const bulan = [...new Set(fin.rows.map((r) => monthLabel(r["Tanggal"])).filter(Boolean))].sort((a, b) => new Date("1 " + a) - new Date("1 " + b));
+    const mm = {}; fin.rows.forEach((r) => { const d = parseTgl(r["Tanggal"]); if (d) mm[monthLabel(r["Tanggal"])] = d.getFullYear() * 12 + d.getMonth(); });
+    const bulan = Object.keys(mm).sort((a, b) => mm[a] - mm[b]);
     fillSelect($("ffl-bulan"), ["Semua", ...bulan], selValue($("ffl-bulan")) || "Semua");
   }
   if ($("ffl-jenis")) {
@@ -1709,7 +1710,11 @@ function renderFinCharts(rows, perProg, tipeOf) {
   }
   const PC = (typeof PROG_COLORS !== "undefined") ? PROG_COLORS : ["#2F6FB0", "#16A34A", "#F59E0B", "#8B5CF6", "#DC2626", "#0EA5E9", "#DB2777", "#65A30D", "#9333EA"];
   const progList = Object.keys(perProg);
-  const monthSort = (a, b) => new Date("1 " + a) - new Date("1 " + b);
+  // kunci urutan bulan dari tanggal asli (biar "Agu/Mei/Okt" tetap urut benar)
+  const monthKeyNum = (v) => { const d = parseTgl(v); return d ? d.getFullYear() * 12 + d.getMonth() : null; };
+  const monthMeta = {};   // label -> keynum
+  rows.forEach((r) => { const d = parseTgl(r["Tanggal"]); if (d) monthMeta[monthLabel(r["Tanggal"])] = d.getFullYear() * 12 + d.getMonth(); });
+  const monthSort = (a, b) => (monthMeta[a] ?? 0) - (monthMeta[b] ?? 0);
 
   // 1) Realisasi bulanan, ditumpuk per program
   const bulanSet = {}, realBP = {};
