@@ -232,19 +232,20 @@ function renderCalendar(rows) {
   const nm = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
   if ($("cal-title")) $("cal-title").textContent = nm[m] + " " + y;
 
-  // kegiatan per tanggal (key: YYYY-MM-DD)
+  // kegiatan per tanggal (key: tanggal) simpan objek lengkap
   const byDay = {};
   dated.forEach((r) => {
     const d = parseTgl(r.tanggal);
     if (d.getFullYear() === y && d.getMonth() === m) {
       const key = d.getDate();
-      (byDay[key] = byDay[key] || []).push(r.kegiatan || r.jenis || "Kegiatan");
+      (byDay[key] = byDay[key] || []).push(r);
     }
   });
 
+  const stClass = (st) => st === "Selesai" ? "ev-done" : (st === "On-Going" ? "ev-ongoing" : "ev-upcoming");
   const firstDay = (new Date(y, m, 1).getDay() + 6) % 7;  // Senin=0
   const daysInMonth = new Date(y, m + 1, 0).getDate();
-  const hari = ["Sen","Sel","Rab","Kam","Jum","Sab","Min"];
+  const hari = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
   let html = '<div class="cal-grid cal-head">' + hari.map((h) => `<div class="cal-dow">${h}</div>`).join("") + "</div>";
   html += '<div class="cal-grid">';
   for (let i = 0; i < firstDay; i++) html += '<div class="cal-cell empty"></div>';
@@ -252,35 +253,52 @@ function renderCalendar(rows) {
     const ev = byDay[d];
     if (ev) {
       html += `<div class="cal-cell has-ev" data-day="${d}"><div class="cal-num">${d}</div>` +
-        ev.slice(0, 2).map((e) => `<div class="cal-ev">${e}</div>`).join("") +
-        (ev.length > 2 ? `<div class="cal-more">+${ev.length - 2}</div>` : "") + "</div>";
+        ev.slice(0, 3).map((r) => `<div class="cal-ev ${stClass(r.status)}">${r.kegiatan || r.jenis || "Kegiatan"}</div>`).join("") +
+        (ev.length > 3 ? `<div class="cal-more">+${ev.length - 3}</div>` : "") + "</div>";
     } else {
       html += `<div class="cal-cell"><div class="cal-num">${d}</div></div>`;
     }
   }
   html += "</div>";
+  // legenda
+  html += '<div class="cal-legend">' +
+    '<span><i class="dot ev-upcoming"></i> Upcoming</span>' +
+    '<span><i class="dot ev-ongoing"></i> On-Going</span>' +
+    '<span><i class="dot ev-done"></i> Selesai</span></div>';
   host.innerHTML = html;
 
-  // klik tanggal berkegiatan -> sorot baris di tabel detail
+  // klik tanggal -> tampilkan detail kegiatan hari itu
   host.querySelectorAll(".cal-cell.has-ev").forEach((cell) => {
     cell.addEventListener("click", () => {
       const day = +cell.dataset.day;
-      const target = new Date(y, m, day).toDateString();
-      const tbody = document.querySelector("#detail-table tbody");
-      if (!tbody) return;
-      let hit = null;
-      // cari baris yang tanggalnya cocok (kolom Tanggal = kolom ke-3)
-      [...tbody.querySelectorAll("tr")].forEach((tr) => {
-        const cellDate = tr.children[2] ? tr.children[2].textContent.trim() : "";
-        if (cellDate && new Date(cellDate).toDateString() === target) hit = tr;
-      });
-      tbody.querySelectorAll("tr").forEach((tr) => (tr.style.background = ""));
-      if (hit) {
-        hit.style.background = "#FFF6CC";
-        hit.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
+      showCalDetail(byDay[day] || [], new Date(y, m, day));
     });
   });
+}
+
+function showCalDetail(list, dateObj) {
+  let modal = $("cal-detail-modal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "cal-detail-modal"; modal.className = "cal-modal";
+    modal.innerHTML = '<div class="cal-modal-box"><button class="cal-modal-x" type="button">✕</button><div class="cal-modal-body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
+    modal.querySelector(".cal-modal-x").addEventListener("click", () => { modal.hidden = true; });
+  }
+  const stBadge = (st) => {
+    const c = st === "Selesai" ? "st-selesai" : (st === "On-Going" ? "st-ongoing" : "st-upcoming");
+    return `<span class="badge ${c}">${st}</span>`;
+  };
+  const tgl = dateObj.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  let body = `<h3 style="margin:0 0 4px;">📅 ${tgl}</h3><div class="sub" style="margin-bottom:10px;">${list.length} kegiatan</div>`;
+  body += list.map((r) => `<div class="cal-detail-item">
+      <div><b>${r.kegiatan || r.jenis || "Kegiatan"}</b> ${stBadge(r.status)}</div>
+      <div class="sub">👤 PIC: ${r.pic || "-"} &nbsp;·&nbsp; 🏷️ ${labelOf(r._prog) || "-"}</div>
+      ${r.lokasi ? '<div class="sub">📍 ' + r.lokasi + "</div>" : ""}
+    </div>`).join("");
+  modal.querySelector(".cal-modal-body").innerHTML = body;
+  modal.hidden = false;
 }
 function calShift(delta) {
   if (!CAL_MONTH) CAL_MONTH = new Date();
