@@ -1630,16 +1630,23 @@ function renderFinancial() {
     return "";
   };
 
-  // FILTER khusus financial
-  const fp = selValue($("ffl-program")), fb = selValue($("ffl-bulan")), fj = selValue($("ffl-jenis"));
-  let rows = fin.rows.slice();
-  if (fp && fp !== "Semua") rows = rows.filter((r) => labelOf(keyFromStored(r["Program"])) === fp);
-  if (fb && fb !== "Semua") rows = rows.filter((r) => monthLabel(r["Tanggal"]) === fb);
-  if (fj && fj !== "Semua") rows = rows.filter((r) => String(r["Jenis Pengajuan"] || "") === fj);
+  // FILTER khusus financial (Program, Tahun, Bulan, Jenis) — memengaruhi SEMUA (KPI/grafik/ringkasan/tabel)
+  const fp = selValue($("ffl-program")), fy = selValue($("ffl-tahun")), fb = selValue($("ffl-bulan")), fj = selValue($("ffl-jenis"));
+  const yearOf = (v) => { const d = parseTgl(v); return d ? String(d.getFullYear()) : ""; };
+  const keepRow = (r) => {
+    if (fp && fp !== "Semua" && labelOf(keyFromStored(r["Program"])) !== fp) return false;
+    const t = tipeOf(r);
+    if (t === "PKS Awal" || t === "Penambahan PKS") return true;   // PKS selalu masuk (dana dasar)
+    if (fy && fy !== "Semua" && yearOf(r["Tanggal"]) !== fy) return false;
+    if (fb && fb !== "Semua" && monthLabel(r["Tanggal"]) !== fb) return false;
+    if (fj && fj !== "Semua" && String(r["Jenis Pengajuan"] || "") !== fj) return false;
+    return true;
+  };
+  let rows = fin.rows.filter(keepRow);
 
-  // ringkasan per program (PKS/DPKS/Pengajuan dari data; SALDO dari baris terakhir tab)
+  // ringkasan per program (dari data TERFILTER)
   const perProg = {};
-  fin.rows.forEach((r) => {
+  rows.forEach((r) => {
     const key = keyFromStored(r["Program"]);
     const prog = labelOf(key);
     if (!perProg[prog]) perProg[prog] = { key: key, pks: 0, dpks: 0, ajuan: 0, saldo: 0 };
@@ -1647,9 +1654,10 @@ function renderFinancial() {
     if (tipe === "PKS Awal" || tipe === "Penambahan PKS") { perProg[prog].pks += num(r["Nilai PKS"]); perProg[prog].dpks += num(r["DPKS"]); }
     else if (tipe === "Pengajuan") { perProg[prog].ajuan += num(r["Nilai Pengajuan"]); }
   });
+  const noFilter = (!fp || fp === "Semua") && (!fy || fy === "Semua") && (!fb || fb === "Semua") && (!fj || fj === "Semua");
   Object.keys(perProg).forEach((p) => {
     const k = perProg[p].key;
-    perProg[p].saldo = (saldoMap[k] !== undefined) ? num(saldoMap[k]) : (perProg[p].pks - perProg[p].dpks - perProg[p].ajuan);
+    perProg[p].saldo = (noFilter && saldoMap[k] !== undefined) ? num(saldoMap[k]) : (perProg[p].pks - perProg[p].dpks - perProg[p].ajuan);
   });
 
   let tPks = 0, tDpks = 0, tAjuan = 0, tSaldo = 0;
@@ -1682,6 +1690,10 @@ function renderFinancial() {
     const mm = {}; fin.rows.forEach((r) => { const d = parseTgl(r["Tanggal"]); if (d) mm[monthLabel(r["Tanggal"])] = d.getFullYear() * 12 + d.getMonth(); });
     const bulan = Object.keys(mm).sort((a, b) => mm[a] - mm[b]);
     fillSelect($("ffl-bulan"), ["Semua", ...bulan], selValue($("ffl-bulan")) || "Semua");
+  }
+  if ($("ffl-tahun")) {
+    const tahun = [...new Set(fin.rows.map((r) => yearOf(r["Tanggal"])).filter(Boolean))].sort();
+    fillSelect($("ffl-tahun"), ["Semua", ...tahun], selValue($("ffl-tahun")) || "Semua");
   }
   if ($("ffl-jenis")) {
     const jenis = [...new Set(fin.rows.map((r) => String(r["Jenis Pengajuan"] || "")).filter(Boolean))].sort();
@@ -2250,16 +2262,16 @@ async function init() {
     await loadFlex(); renderFlexTable($("in-program").value); b.textContent = t;
   });
   if ($("fin-show-form")) $("fin-show-form").addEventListener("click", () => {
-    const w = $("fin-form-wrap"); if (!w) return;
+    const w = $("fin-hideable"); if (!w) return;
     w.hidden = !w.hidden;
-    $("fin-show-form").textContent = w.hidden ? "➕ Input Data" : "✖ Tutup Form";
+    $("fin-show-form").textContent = w.hidden ? "➕ Input Data" : "✖ Tutup";
   });
   if ($("fp-simpan")) $("fp-simpan").addEventListener("click", simpanPKS);
   if ($("fg-kirim")) $("fg-kirim").addEventListener("click", simpanPengajuan);
   if ($("fp-nilai")) $("fp-nilai").addEventListener("input", updateDPKS);
   if ($("fp-jenispks")) $("fp-jenispks").addEventListener("change", updateDPKS);
   if ($("fin-refresh")) $("fin-refresh").addEventListener("click", async () => { await loadFin(); renderFinancial(); });
-  ["ffl-program", "ffl-bulan", "ffl-jenis"].forEach((id) => { if ($(id)) $(id).addEventListener("change", renderFinancial); });
+  ["ffl-program", "ffl-tahun", "ffl-bulan", "ffl-jenis"].forEach((id) => { if ($(id)) $(id).addEventListener("change", renderFinancial); });
   if ($("mitra-toggle")) $("mitra-toggle").addEventListener("click", () => {
     const t = $("mitra-list"); if (t) t.hidden = !t.hidden;
   });
