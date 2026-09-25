@@ -1760,20 +1760,39 @@ function renderFinCharts(rows, perProg, tipeOf) {
     (realBP[prog] = realBP[prog] || {})[m] = (realBP[prog][m] || 0) + num(r["Nilai Pengajuan"]);
   });
   const bulan = Object.keys(bulanSet).sort(monthSort);
-  // urutkan program: TOTAL kecil di bawah, besar di atas (Chart.js menumpuk dataset pertama paling bawah)
-  const progByTotal = progList.slice().sort((a, b) => {
-    const ta = bulan.reduce((s, m) => s + ((realBP[a] || {})[m] || 0), 0);
-    const tb = bulan.reduce((s, m) => s + ((realBP[b] || {})[m] || 0), 0);
-    return ta - tb;   // kecil dulu -> di bawah
+  // Susun PER BULAN: tiap bulan diurutkan sendiri (nilai kecil di bawah).
+  // Pakai "layer" (dataset per posisi tumpukan); warna & tooltip mengikuti program di posisi itu.
+  const perMonthSorted = {};
+  bulan.forEach((m) => {
+    perMonthSorted[m] = progList.map((p) => ({ prog: p, val: (realBP[p] || {})[m] || 0 }))
+      .filter((x) => x.val > 0).sort((a, b) => a.val - b.val);   // kecil dulu -> bawah
   });
+  const maxLayers = Math.max(1, ...bulan.map((m) => perMonthSorted[m].length));
+  const colorOf = (p) => PC[progList.indexOf(p) % PC.length];
+  const layerDatasets = [];
+  for (let L = 0; L < maxLayers; L++) {
+    layerDatasets.push({
+      label: "layer" + L,
+      stack: "s",
+      data: bulan.map((m) => { const it = perMonthSorted[m][L]; return it ? Math.round(it.val / 1e6) : 0; }),
+      backgroundColor: bulan.map((m) => { const it = perMonthSorted[m][L]; return it ? colorOf(it.prog) : "rgba(0,0,0,0)"; }),
+      _progs: bulan.map((m) => { const it = perMonthSorted[m][L]; return it ? it.prog : ""; }),
+    });
+  }
   const c1 = $("fin-chart-bulan");
   if (c1) {
     if (chartFinBulan) chartFinBulan.destroy();
     chartFinBulan = new Chart(c1, {
       type: "bar",
-      data: { labels: bulan.length ? bulan : ["(kosong)"],
-        datasets: progByTotal.map((p) => ({ label: p, backgroundColor: PC[progList.indexOf(p) % PC.length], data: bulan.map((m) => Math.round(((realBP[p] || {})[m] || 0) / 1e6)) })) },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top" } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, title: { display: true, text: "juta Rp" } } } },
+      data: { labels: bulan.length ? bulan : ["(kosong)"], datasets: layerDatasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "top", labels: { generateLabels: () => progList.map((p) => ({ text: p, fillStyle: colorOf(p), strokeStyle: colorOf(p) })) } },
+          tooltip: { callbacks: { label: (ctx) => { const p = ctx.dataset._progs[ctx.dataIndex]; return p ? p + ": " + ctx.parsed.y + " jt" : ""; } } },
+        },
+        scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, title: { display: true, text: "juta Rp" } } },
+      },
     });
   }
 
