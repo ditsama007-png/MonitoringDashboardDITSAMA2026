@@ -303,7 +303,7 @@ function showCalDetail(list, dateObj) {
 function calShift(delta) {
   if (!CAL_MONTH) CAL_MONTH = new Date();
   CAL_MONTH.setMonth(CAL_MONTH.getMonth() + delta);
-  renderCalendar(rowsForFilter());
+  renderCalendar(flexRowsFiltered());
 }
 
 function renderPivot(rows) { renderPivotInto("pivot-table", rows); }
