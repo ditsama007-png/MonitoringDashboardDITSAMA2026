@@ -14,7 +14,8 @@ const fmtRupiah = (n) => {
 const pct = (x) => Math.round((x || 0) * 100) + "%";
 const KEBER_SKOR = { "sesuai rencana": 1, "ada kendala": 0.7, "tidak sesuai rencana": 0.4 };
 
-function programByKey(key) { return PROGRAMS.find((p) => p.key === key); }
+function allPrograms_() { return (typeof FIN_PROGRAMS !== "undefined") ? PROGRAMS.concat(FIN_PROGRAMS) : PROGRAMS; }
+function programByKey(key) { return allPrograms_().find((p) => p.key === key); }
 function labelOf(key) { const p = programByKey(key); return p ? p.label : key; }
 
 // ---------------------------------------------------------- data contoh ----
@@ -147,7 +148,7 @@ function render() {
 // ---- konversi baris DataMasuk -> bentuk standar yang dipakai render lama ----
 function keyFromStored(p) {
   p = String(p || "");
-  const f = PROGRAMS.find((x) => x.key === p || x.label === p);
+  const f = allPrograms_().find((x) => x.key === p || x.label === p);
   return f ? f.key : p;
 }
 function sumColsMatch(r, re) {
@@ -1661,17 +1662,14 @@ function renderFinancial() {
   if ($("fin-serap")) $("fin-serap").textContent = dasar > 0 ? Math.round(tAjuan / dasar * 100) + "%" : "0%";
 
   // dropdown program di kedua form + filter
+  const FINP = (typeof FIN_PROGRAMS !== "undefined") ? FIN_PROGRAMS : PROGRAMS;
   ["fp-program", "fg-program"].forEach((id) => {
     const sel = $(id);
     if (sel && !sel.options.length) {
-      const canAll = SESSION && (isAllAccess(SESSION.jabatan) || isFinanceOnly(SESSION.jabatan));
-      const allowed = canAll ? PROGRAMS : PROGRAMS.filter((p) => canAccessProgram(p.key));
-      let html = (allowed.length ? allowed : PROGRAMS).map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
-      if (canAll) html += '<option value="__LAINNYA__">Lainnya… (ketik sendiri)</option>';
+      let html = FINP.map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
+      html += '<option value="__LAINNYA__">Lainnya… (ketik sendiri)</option>';
       sel.innerHTML = html;
     }
-    // wire toggle custom
-    const custId = id + "-custom".replace("program", "prog");
     const cust = $(id.replace("program", "prog") + "-custom");
     if (sel && cust && !sel._wired) {
       sel._wired = 1;
@@ -1679,7 +1677,7 @@ function renderFinancial() {
     }
   });
   if ($("ffl-program") && !$("ffl-program").options.length)
-    fillSelect($("ffl-program"), ["Semua", ...PROGRAMS.map((p) => p.label)], "Semua");
+    fillSelect($("ffl-program"), ["Semua", ...FINP.map((p) => p.label)], "Semua");
   if ($("ffl-bulan")) {
     const mm = {}; fin.rows.forEach((r) => { const d = parseTgl(r["Tanggal"]); if (d) mm[monthLabel(r["Tanggal"])] = d.getFullYear() * 12 + d.getMonth(); });
     const bulan = Object.keys(mm).sort((a, b) => mm[a] - mm[b]);
@@ -1874,7 +1872,7 @@ async function simpanPengajuan() {
 function num(v) { const n = parseFloat(String(v).replace(/[^0-9.-]/g, "")); return isNaN(n) ? 0 : n; }
 function labelFromStored(p) {
   p = String(p || "");
-  const byKey = PROGRAMS.find((x) => x.key === p);
+  const byKey = allPrograms_().find((x) => x.key === p);
   return byKey ? byKey.label : p;
 }
 function milestoneActive(r) {
