@@ -361,3 +361,26 @@ tbody tr:nth-child(even){background:#F8FAFD}
   padding:.4rem .9rem;font-weight:600;font-size:.85rem;cursor:pointer;transition:.15s}
 .prog-tab:hover{background:#E2ECFA}
 .prog-tab.active{background:#1B3A6B;color:#fff;border-color:#1B3A6B}
+
+/* Fix grafik/kotak lari ke samping (grid overflow) */
+.grid-2 > *, .grid-3 > *, .kpi-row > * { min-width: 0; }
+.card { min-width: 0; }
+canvas { max-width: 100% !important; }
+.card > div[style*="position:relative"] { width: 100%; max-width: 100%; overflow: hidden; }
+
+/* Kalender: warna event per status */
+.cal-ev.ev-upcoming{background:#FDF3C7;color:#7A5B00;border-left:3px solid #F5B301}
+.cal-ev.ev-ongoing{background:#DCE9FA;color:#12457F;border-left:3px solid #2F6FB0}
+.cal-ev.ev-done{background:#EAECEF;color:#5A6270;border-left:3px solid #9AA3AF}
+.cal-legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:.8rem;color:#5A6270}
+.cal-legend .dot{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:middle}
+.cal-legend .dot.ev-upcoming{background:#F5B301}
+.cal-legend .dot.ev-ongoing{background:#2F6FB0}
+.cal-legend .dot.ev-done{background:#9AA3AF}
+
+/* Modal detail kalender */
+.cal-modal{position:fixed;inset:0;background:rgba(15,25,45,.45);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px}
+.cal-modal[hidden]{display:none}
+.cal-modal-box{background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:80vh;overflow:auto;padding:1.2rem;position:relative;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.cal-modal-x{position:absolute;top:10px;right:12px;background:none;border:none;font-size:1.1rem;cursor:pointer;color:#6B7688}
+.cal-detail-item{border:1px solid #E5EAF2;border-radius:10px;padding:.6rem .8rem;margin-bottom:8px}
