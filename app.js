@@ -1633,7 +1633,7 @@ function renderFinancial() {
   // FILTER khusus financial
   const fp = selValue($("ffl-program")), fb = selValue($("ffl-bulan")), fj = selValue($("ffl-jenis"));
   let rows = fin.rows.slice();
-  if (fp && fp !== "Semua") rows = rows.filter((r) => labelFromStored(r["Program"]) === fp);
+  if (fp && fp !== "Semua") rows = rows.filter((r) => labelOf(keyFromStored(r["Program"])) === fp);
   if (fb && fb !== "Semua") rows = rows.filter((r) => monthLabel(r["Tanggal"]) === fb);
   if (fj && fj !== "Semua") rows = rows.filter((r) => String(r["Jenis Pengajuan"] || "") === fj);
 
@@ -1698,9 +1698,9 @@ function renderFinancial() {
       || '<span class="sub">Belum ada data.</span>';
     tabHost.querySelectorAll(".prog-tab").forEach((b) => b.addEventListener("click", () => { FIN_TAB = b.dataset.prog; renderFinancial(); }));
   }
-  // tabel hanya tampilkan program tab aktif
+  // tabel hanya tampilkan program tab aktif (pakai ekspresi kunci yang SAMA dgn pembangun tab)
   let tableRows = rows;
-  if (FIN_TAB) tableRows = tableRows.filter((r) => labelFromStored(r["Program"]) === FIN_TAB);
+  if (FIN_TAB) tableRows = tableRows.filter((r) => labelOf(keyFromStored(r["Program"])) === FIN_TAB);
 
   // tabel data keuangan (ikut filter + tab) — Saldo dari kolom sheet
   const thead = document.querySelector("#fin-table thead");
