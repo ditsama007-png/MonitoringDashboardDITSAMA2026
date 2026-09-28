@@ -384,3 +384,9 @@ canvas { max-width: 100% !important; }
 .cal-modal-box{background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:80vh;overflow:auto;padding:1.2rem;position:relative;box-shadow:0 10px 40px rgba(0,0,0,.25)}
 .cal-modal-x{position:absolute;top:10px;right:12px;background:none;border:none;font-size:1.1rem;cursor:pointer;color:#6B7688}
 .cal-detail-item{border:1px solid #E5EAF2;border-radius:10px;padding:.6rem .8rem;margin-bottom:8px}
+
+/* Detail nama SDM per peran */
+.sdm-names-row td{background:#F6F9FD}
+.sdm-name-list{margin:4px 0 4px 20px;padding:0;columns:2;column-gap:24px;font-size:.85rem}
+.sdm-name-list li{padding:2px 0;break-inside:avoid}
+@media (max-width:600px){.sdm-name-list{columns:1}}
