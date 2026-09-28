@@ -68,6 +68,14 @@ function parseTgl(v) {
   if (m) { let dd = +m[1], mm = +m[2], yy = +m[3]; if (yy < 100) yy += 2000; return new Date(yy, mm - 1, dd); }
   const d = new Date(s); return isNaN(d) ? null : d;
 }
+// tanggal wajar? (buang typo tahun spt 2006/2035 dari perhitungan skala timeline)
+function tglWajar(d) { if (!d) return false; const y = d.getFullYear(); return y >= 2020 && y <= 2035; }
+// urutan fase tetap: Persiapan -> Proses -> Fase 1..10 -> Pelaporan (dari OPSI_FASE)
+function faseRank(f) {
+  const list = (typeof OPSI_FASE !== "undefined") ? OPSI_FASE : ["Persiapan", "Proses", "Pelaporan"];
+  const i = list.findIndex((x) => x.toLowerCase() === String(f || "").trim().toLowerCase());
+  return i < 0 ? 999 : i;
+}
 
 function monthLabel(d) {
   const dt = parseTgl(d);
@@ -185,6 +193,7 @@ function flexToStd(r) {
     _prog: keyFromStored(r["Program"]),
     kegiatan: r["Nama Kegiatan"] || "",
     tanggal: r["Tanggal Kegiatan"] || "",
+    fase: String(r["Fase Kegiatan"] || "").trim(),
     anggaran: sumColsMatch(r, /anggaran/i),
     realisasi: sumColsMatch(r, /realisasi/i),
     target: sumColsMatch(r, /^Peserta .+ \(terdaftar\)$/i),
@@ -207,10 +216,14 @@ function flexRowsFiltered() {
   const flex = FLEX_CACHE || { rows: [] };
   let rows = flex.rows.map(flexToStd);
   const fpLabel = selValue($("flt-program")), fb = selValue($("flt-bulan")),
-        fk = selValue($("flt-kegiatan")), fl = selValue($("flt-level"));
+        fk = selValue($("flt-kegiatan")), fl = selValue($("flt-level")),
+        fy = selValue($("flt-tahun")), ff = selValue($("flt-fase"));
   const fp = filterProgramToKey(fpLabel);
+  const yearOf = (v) => { const d = parseTgl(v); return d ? String(d.getFullYear()) : ""; };
   if (fp && fp !== "Semua") rows = rows.filter((r) => r._prog === fp);
+  if (fy && fy !== "Semua") rows = rows.filter((r) => yearOf(r.tanggal) === fy);
   if (fb && fb !== "Semua") rows = rows.filter((r) => monthLabel(r.tanggal) === fb);
+  if (ff && ff !== "Semua") rows = rows.filter((r) => r.fase === ff);
   if (fk && fk !== "Semua") rows = rows.filter((r) => r.kegiatan === fk);
   if (fl && fl !== "Semua") rows = rows.filter((r) => (r.level || "") === fl);
   return rows;
@@ -1106,10 +1119,17 @@ function rebuildFilters() {
   fillSelect($("flt-program"), ["Semua", ...PROGRAMS.map((p) => p.label)], selValue($("flt-program")));
   // kumpulkan semua baris dari DataMasuk (dikonversi)
   const all = ((FLEX_CACHE && FLEX_CACHE.rows) || []).map(flexToStd);
-  // Bulan
-  const bulan = [...new Set(all.map((r) => monthLabel(r.tanggal)).filter(Boolean))]
-    .sort((a, b) => new Date("1 " + a) - new Date("1 " + b));
+  // Tahun
+  const yearOf = (v) => { const d = parseTgl(v); return d ? String(d.getFullYear()) : ""; };
+  const tahun = [...new Set(all.map((r) => yearOf(r.tanggal)).filter(Boolean))].sort();
+  fillSelect($("flt-tahun"), ["Semua", ...tahun], selValue($("flt-tahun")));
+  // Bulan (urut kronologis pakai tanggal asli)
+  const mm = {}; all.forEach((r) => { const d = parseTgl(r.tanggal); if (d) mm[monthLabel(r.tanggal)] = d.getFullYear() * 12 + d.getMonth(); });
+  const bulan = Object.keys(mm).sort((a, b) => mm[a] - mm[b]);
   fillSelect($("flt-bulan"), ["Semua", ...bulan], selValue($("flt-bulan")));
+  // Jenis Fase (urut baku dari OPSI_FASE)
+  const faseSet = [...new Set(all.map((r) => r.fase).filter(Boolean))].sort((a, b) => faseRank(a) - faseRank(b));
+  fillSelect($("flt-fase"), ["Semua", ...faseSet], selValue($("flt-fase")));
   // Kegiatan (menyesuaikan program terpilih)
   const fp = $("flt-program").value;
   const keg = [...new Set(all.filter((r) => fp === "Semua" || labelOf(r._prog) === fp)
@@ -1424,8 +1444,11 @@ function drawGantt(host, items) {
     if (x.d > byFase[f].max) byFase[f].max = x.d;
     byFase[f].count++;
   });
-  let gMin = items[0].d, gMax = items[0].d;
-  items.forEach((x) => { if (x.d < gMin) gMin = x.d; if (x.d > gMax) gMax = x.d; });
+  // skala hanya dari tanggal wajar (buang typo tahun)
+  const wajar = items.filter((x) => tglWajar(x.d));
+  const skala = wajar.length ? wajar : items;
+  let gMin = skala[0].d, gMax = skala[0].d;
+  skala.forEach((x) => { if (x.d < gMin) gMin = x.d; if (x.d > gMax) gMax = x.d; });
   const rawSpan = Math.max((gMax - gMin) / 86400000, 1);
   const pad = Math.max(rawSpan * 0.08, 1);          // padding kiri-kanan
   const base = gMin.getTime() - pad * 86400000;
@@ -1433,10 +1456,11 @@ function drawGantt(host, items) {
   const warna = { "persiapan": "#2F6FB0", "pelaksanaan": "#16A34A", "pelaporan": "#F59E0B", "proses": "#8B5CF6", "evaluasi": "#DC2626" };
   const fmt = (d) => String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0");
   let html = '<div class="gantt">';
-  Object.keys(byFase).sort((a, b) => byFase[a].min - byFase[b].min).forEach((f) => {
+  Object.keys(byFase).sort((a, b) => faseRank(a) - faseRank(b)).forEach((f) => {
     const o = byFase[f];
     let left = (o.min.getTime() - base) / 86400000 / total * 100;
     let width = ((o.max - o.min) / 86400000 + 1) / total * 100;
+    left = Math.max(0, Math.min(96, left));
     width = Math.max(width, 4); if (left + width > 100) width = 100 - left;
     const c = warna[f.toLowerCase()] || "#64748B";
     html += '<div class="gantt-row"><div class="gantt-lab">' + f + '</div>' +
@@ -1479,9 +1503,11 @@ function renderDashGantt() {
     .filter((x) => x.fase && x.d);
   if (!data.length) { host.innerHTML = '<div class="empty">Belum ada data fase.</div>'; return; }
 
-  // batas waktu global
-  let gMin = data[0].d, gMax = data[0].d;
-  data.forEach((x) => { if (x.d < gMin) gMin = x.d; if (x.d > gMax) gMax = x.d; });
+  // batas waktu global — hanya dari tanggal wajar (buang typo tahun spt 2006)
+  const skala = data.filter((x) => tglWajar(x.d));
+  const sd = skala.length ? skala : data;
+  let gMin = sd[0].d, gMax = sd[0].d;
+  sd.forEach((x) => { if (x.d < gMin) gMin = x.d; if (x.d > gMax) gMax = x.d; });
   const rawSpan = Math.max((gMax - gMin) / 86400000, 1);
   const pad = Math.max(rawSpan * 0.08, 1);
   const base = gMin.getTime() - pad * 86400000;
@@ -1501,10 +1527,11 @@ function renderDashGantt() {
       byFase[x.fase].count++;
     });
     const c = progColor(pk);
-    Object.keys(byFase).sort((a, b) => byFase[a].min - byFase[b].min).forEach((f) => {
+    Object.keys(byFase).sort((a, b) => faseRank(a) - faseRank(b)).forEach((f) => {
       const o = byFase[f];
       let left = (o.min.getTime() - base) / 86400000 / total * 100;
       let width = ((o.max - o.min) / 86400000 + 1) / total * 100;
+      left = Math.max(0, Math.min(96, left));
       width = Math.max(width, 4); if (left + width > 100) width = 100 - left;
       html += '<div class="gantt-row"><div class="gantt-lab">' + labelOf(pk) + ' · ' + f + '</div>' +
         '<div class="gantt-track"><div class="gantt-bar" style="left:' + left + '%;width:' + width + '%;background:' + c + ';" title="' + labelOf(pk) + ' - ' + f + ': ' + fmt(o.min) + '–' + fmt(o.max) + '">' +
@@ -2294,7 +2321,7 @@ async function init() {
     const t = $("mitra-list"); if (t) t.hidden = !t.hidden;
   });
   loadFlex();
-  ["flt-program", "flt-bulan", "flt-kegiatan", "flt-level"].forEach((id) =>
+  ["flt-program", "flt-tahun", "flt-bulan", "flt-fase", "flt-kegiatan", "flt-level"].forEach((id) =>
     $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
 }
 
