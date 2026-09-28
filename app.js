@@ -522,11 +522,14 @@ function renderPeserta() {
   // ---- SDM terlibat per peran: HITUNG NAMA UNIK ----
   // Utama: kolom "SDM {peran} (daftar nama)" (dipisah koma).
   // Cadangan (data lama): kolom "SDM {peran} - Nama N".
-  const perSDMset = {};   // peran -> Set(nama unik, lowercase)
-  const addNama = (peran, val) => {
+  const perSDMset = {};   // peran -> Set(nama unik ternormalisasi)
+  const allSDM = new Set();   // semua orang berbeda (lintas peran)
+  const addNama = (peranRaw, val) => {
+    const pr = String(peranRaw || "").trim();
+    const peran = pr ? pr.charAt(0).toUpperCase() + pr.slice(1).toLowerCase() : "Lainnya";
     splitPeople(val).forEach((s) => {
-      const nm = s.trim().toLowerCase();
-      if (nm) { (perSDMset[peran] = perSDMset[peran] || new Set()).add(nm); }
+      const nm = normNamaOrang(s);
+      if (nm) { (perSDMset[peran] = perSDMset[peran] || new Set()).add(nm); allSDM.add(nm); }
     });
   };
   rows.forEach((r) => {
@@ -543,11 +546,12 @@ function renderPeserta() {
   const sdmPeran = Object.keys(perSDM);
   const sthead = document.querySelector("#peserta-sdm thead");
   const stbody = document.querySelector("#peserta-sdm tbody");
-  if (sthead) sthead.innerHTML = "<tr><th>Peran SDM</th><th>Jumlah (orang unik)</th></tr>";
+  if (sthead) sthead.innerHTML = "<tr><th>Peran SDM</th><th>Jumlah (orang berbeda)</th></tr>";
   if (stbody) {
     const filled = sdmPeran.filter((p) => perSDM[p] > 0);
     if (!filled.length) { stbody.innerHTML = '<tr><td colspan="2" class="empty">Belum ada data SDM.</td></tr>'; }
     else {
+      // unik per (peran + nama): orang & peran sama di aktivitas lain = 1; beda peran = dihitung terpisah
       let tot = 0; filled.forEach((p) => tot += perSDM[p]);
       stbody.innerHTML = filled.map((p) => `<tr><td>${p}</td><td>${perSDM[p]}</td></tr>`).join("") +
         `<tr><td><b>Total SDM</b></td><td><b>${tot}</b></td></tr>`;
@@ -656,6 +660,17 @@ function addPesertaRow(kat, ter, had) {
   if (ter) row.querySelector(".p-ter").value = ter;
   if (had) row.querySelector(".p-had").value = had;
   row.querySelector(".dyn-del").addEventListener("click", () => row.remove());
+}
+// Normalisasi nama orang agar penulisan berbeda dianggap orang yang sama:
+// "1. Dr. Budi  Santoso, S.Si" == "budi santoso" == "Budi Santoso, M.T"
+function normNamaOrang(s) {
+  let t = String(s || "").toLowerCase().trim();
+  t = t.replace(/^\d+\s*[.)\-]\s*/, "");             // nomor urut "1." "2)"
+  t = t.split(",")[0];                                 // buang gelar belakang (setelah koma)
+  let prev;
+  do { prev = t; t = t.replace(/^(prof|dr|drs|dra|ir|hj|h)\.\s*/, ""); } while (t !== prev);   // gelar depan
+  t = t.replace(/[^a-zÀ-ɏ\s]/g, " ");        // buang tanda baca/angka
+  return t.replace(/\s+/g, " ").trim();
 }
 function splitNames(text) {
   return splitPeople(text);
