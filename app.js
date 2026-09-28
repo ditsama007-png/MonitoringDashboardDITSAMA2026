@@ -462,8 +462,10 @@ function renderPeserta() {
     });
     if (ada) {
       jmlKeg++; totDaftar += rowTer; totHadir += rowHad;
-      kegLabels.push((r["Nama Kegiatan"] || "-").slice(0, 18));
-      kegTer.push(rowTer); kegHad.push(rowHad);
+      if (rowTer > 0) {   // grafik: aktivitas tanpa pendaftar tidak ditampilkan
+        kegLabels.push((r["Nama Kegiatan"] || "-").slice(0, 18));
+        kegTer.push(rowTer); kegHad.push(rowHad);
+      }
     }
   });
 
@@ -511,8 +513,9 @@ function renderPeserta() {
   const tbody = document.querySelector("#peserta-kategori tbody");
   if (thead) thead.innerHTML = "<tr><th>Jenis</th><th>Terdaftar</th><th>Hadir</th><th>% Hadir</th></tr>";
   if (tbody) {
-    if (!cats.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Belum ada data peserta.</td></tr>'; }
-    else tbody.innerHTML = cats.map((c) => {
+    const catsIsi = cats.filter((c) => perKat[c].ter > 0);   // jenis dgn terdaftar 0 disembunyikan
+    if (!catsIsi.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Belum ada data peserta.</td></tr>'; }
+    else tbody.innerHTML = catsIsi.map((c) => {
       const t = perKat[c].ter, h = perKat[c].had;
       const pct = t > 0 ? Math.round(h / t * 100) + "%" : "0%";
       return `<tr><td>${c}</td><td>${t}</td><td>${h}</td><td>${pct}</td></tr>`;
@@ -524,12 +527,17 @@ function renderPeserta() {
   // Cadangan (data lama): kolom "SDM {peran} - Nama N".
   const perSDMset = {};   // peran -> Set(nama unik ternormalisasi)
   const allSDM = new Set();   // semua orang berbeda (lintas peran)
+  const perSDMnama = {};      // peran -> { namaNormal: namaTampilan }
   const addNama = (peranRaw, val) => {
     const pr = String(peranRaw || "").trim();
     const peran = pr ? pr.charAt(0).toUpperCase() + pr.slice(1).toLowerCase() : "Lainnya";
     splitPeople(val).forEach((s) => {
       const nm = normNamaOrang(s);
-      if (nm) { (perSDMset[peran] = perSDMset[peran] || new Set()).add(nm); allSDM.add(nm); }
+      if (nm) {
+        (perSDMset[peran] = perSDMset[peran] || new Set()).add(nm); allSDM.add(nm);
+        const mp = (perSDMnama[peran] = perSDMnama[peran] || {});
+        if (!mp[nm]) mp[nm] = String(s).trim().replace(/^\d+\s*[.)\-]\s*/, "").replace(/\s+/g, " ");   // nama tampilan (pertama ditemukan)
+      }
     });
   };
   rows.forEach((r) => {
@@ -546,15 +554,28 @@ function renderPeserta() {
   const sdmPeran = Object.keys(perSDM);
   const sthead = document.querySelector("#peserta-sdm thead");
   const stbody = document.querySelector("#peserta-sdm tbody");
-  if (sthead) sthead.innerHTML = "<tr><th>Peran SDM</th><th>Jumlah (orang berbeda)</th></tr>";
+  if (sthead) sthead.innerHTML = "<tr><th>Peran SDM</th><th>Jumlah (orang berbeda)</th><th></th></tr>";
   if (stbody) {
     const filled = sdmPeran.filter((p) => perSDM[p] > 0);
-    if (!filled.length) { stbody.innerHTML = '<tr><td colspan="2" class="empty">Belum ada data SDM.</td></tr>'; }
+    if (!filled.length) { stbody.innerHTML = '<tr><td colspan="3" class="empty">Belum ada data SDM.</td></tr>'; }
     else {
       // unik per (peran + nama): orang & peran sama di aktivitas lain = 1; beda peran = dihitung terpisah
       let tot = 0; filled.forEach((p) => tot += perSDM[p]);
-      stbody.innerHTML = filled.map((p) => `<tr><td>${p}</td><td>${perSDM[p]}</td></tr>`).join("") +
-        `<tr><td><b>Total SDM</b></td><td><b>${tot}</b></td></tr>`;
+      const esc = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      stbody.innerHTML = filled.map((p, i) => {
+        const names = Object.values(perSDMnama[p] || {}).sort((a, b) => a.localeCompare(b, "id"));
+        return `<tr><td>${esc(p)}</td><td>${perSDM[p]}</td>` +
+          `<td style="text-align:right;"><button type="button" class="mini-btn sdm-detail" data-i="${i}">Detail</button></td></tr>` +
+          `<tr class="sdm-names-row" data-i="${i}" hidden><td colspan="3"><ol class="sdm-name-list">` +
+          names.map((n) => `<li>${esc(n)}</li>`).join("") + `</ol></td></tr>`;
+      }).join("") +
+        `<tr><td><b>Total SDM</b></td><td><b>${tot}</b></td><td></td></tr>`;
+      stbody.querySelectorAll(".sdm-detail").forEach((btn) => btn.addEventListener("click", () => {
+        const row = stbody.querySelector(`.sdm-names-row[data-i="${btn.dataset.i}"]`);
+        if (!row) return;
+        row.hidden = !row.hidden;
+        btn.textContent = row.hidden ? "Detail" : "Tutup";
+      }));
     }
   }
 }
