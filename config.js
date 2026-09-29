@@ -54,3 +54,6 @@ const ALL_ACCESS_ROLES = ["Admin", "Head Program", "Finance"];
 
 // Jabatan yang HANYA boleh mengisi menu Financial (tak boleh Input Data program).
 const FINANCE_ONLY_ROLES = ["Finance"];
+
+// Link dashboard/website SUGT (dibuka di tab baru dari menu "Program SUGT")
+const SUGT_URL = "";
