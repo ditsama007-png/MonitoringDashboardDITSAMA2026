@@ -56,4 +56,4 @@ const ALL_ACCESS_ROLES = ["Admin", "Head Program", "Finance"];
 const FINANCE_ONLY_ROLES = ["Finance"];
 
 // Link dashboard/website SUGT (dibuka di tab baru dari menu "Program SUGT")
-const SUGT_URL = "";
+const SUGT_URL = "https://internal.sugtitb.com/";
