@@ -1266,10 +1266,16 @@ function initToggles() {
 }
 
 function setupSugtLink() {
-  const a = $("nav-sugt"); if (!a) return;
-  const url = (typeof SUGT_URL !== "undefined") ? String(SUGT_URL || "").trim() : "";
-  if (url) { a.href = url; a.target = "_blank"; a.rel = "noopener"; }
-  else a.addEventListener("click", (e) => { e.preventDefault(); alert("Link dashboard SUGT belum diatur (SUGT_URL di config.js)."); });
+  const a = $("nav-sugt"); if (!a || a._wired) return;
+  a._wired = 1;
+  const getUrl = () => (typeof SUGT_URL !== "undefined") ? String(SUGT_URL || "").trim() : "";
+  if (getUrl()) { a.href = getUrl(); a.target = "_blank"; a.rel = "noopener"; }
+  a.addEventListener("click", (e) => {
+    const url = getUrl();   // dibaca saat diklik
+    e.preventDefault();
+    if (!url) { alert("Link dashboard SUGT belum diatur (SUGT_URL di config.js)."); return; }
+    window.open(url, "_blank", "noopener");
+  });
 }
 function setActiveNav(btn) {
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.remove("active"));
