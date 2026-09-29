@@ -697,6 +697,17 @@ function splitNames(text) {
   return splitPeople(text);
 }
 // Pisah daftar orang: utamakan baris/;, lalu koma — TAPI gabungkan gelar (S.Si, M.T, Ph.D, dst)
+// Gelar akademik (dengan atau tanpa titik): "S.T." "ST" "MSM" "M.Sc." "PhD" "Ph.D." "S.Kom" dst.
+const GELAR_TANPA_TITIK = new Set(["st", "mt", "msm", "msc", "ms", "mm", "mba", "phd", "se", "sh", "mh", "skom", "mkom",
+  "spd", "mpd", "ssi", "msi", "sag", "mag", "ssos", "msos", "sp", "spsi", "mpsi", "apt", "sked", "ak", "sip", "mip",
+  "sikom", "mikom", "sds", "mds", "sars", "mars", "eng", "dea", "dipl", "bsc", "ba", "ma", "mphil", "med", "meng",
+  "amd", "cfa", "cpa", "ca", "stp", "mtp", "ssn", "msn", "shum", "mhum", "sfarm", "mfarm", "drs", "dra", "ir", "dr", "prof"]);
+function isGelarAkademik(t) {
+  const s = String(t || "").trim();
+  if (!s || /\s/.test(s) || s.length > 8) return false;           // gelar = satu kata pendek
+  if (GELAR_TANPA_TITIK.has(s.replace(/\./g, "").toLowerCase())) return true;
+  return /\./.test(s);                                           // bentuk bertitik lain, mis. "S.Kel."
+}
 function splitPeople(text) {
   const out = [];
   String(text || "").split(/[\n;]+/).forEach((line) => {
@@ -704,8 +715,7 @@ function splitPeople(text) {
     line.split(",").forEach((part) => {
       const t = part.trim();
       if (!t) return;
-      // dianggap gelar kalau: ada titik, tanpa spasi, pendek (≤7) — mis. "S.Si","M.T","Ph.D","S.Kom"
-      const isGelar = /\./.test(t) && !/\s/.test(t) && t.length <= 7;
+      const isGelar = isGelarAkademik(t);
       if (isGelar && cur) cur += ", " + t;
       else { if (cur) out.push(cur); cur = t; }
     });
@@ -1244,7 +1254,9 @@ function initToggles() {
   $("show-control").addEventListener("click", toggleControl);
 
   // navigasi: dashboard / input / program (lihat) — semua boleh dibuka
+  setupSugtLink();
   document.querySelectorAll(".nav-item").forEach((btn) => {
+    if (!btn.dataset.view) return;   // link eksternal (mis. SUGT) tidak diproses sbg view
     btn.addEventListener("click", () => {
       const view = btn.dataset.view;
       setActiveNav(btn);
@@ -1253,6 +1265,12 @@ function initToggles() {
   });
 }
 
+function setupSugtLink() {
+  const a = $("nav-sugt"); if (!a) return;
+  const url = (typeof SUGT_URL !== "undefined") ? String(SUGT_URL || "").trim() : "";
+  if (url) { a.href = url; a.target = "_blank"; a.rel = "noopener"; }
+  else a.addEventListener("click", (e) => { e.preventDefault(); alert("Link dashboard SUGT belum diatur (SUGT_URL di config.js)."); });
+}
 function setActiveNav(btn) {
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.remove("active"));
   if (btn) btn.classList.add("active");
