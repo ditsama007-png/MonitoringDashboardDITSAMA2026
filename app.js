@@ -1046,7 +1046,7 @@ async function hapusMilestone(id, key) {
 function renderNavBadges() {
   document.querySelectorAll('.nav-item[data-view]').forEach((btn) => {
     const v = btn.dataset.view;
-    if (v === "dashboard" || v === "input") return;
+    if (v === "dashboard" || v === "input" || v === "financial" || v === "peserta") return;
     // bersihkan badge lama
     btn.querySelectorAll(".nav-badge").forEach((b) => b.remove());
     const nUp = upcomingMilestones(v).length;
@@ -1306,12 +1306,14 @@ function showView(view) {
   const isDash = view === "dashboard";
   const isInput = view === "input";
   const isFinancial = view === "financial";
-  const isProgram = !isDash && !isInput && !isFinancial;
+  const isPeserta = view === "peserta";
+  const isProgram = !isDash && !isInput && !isFinancial && !isPeserta;
 
   $("view-dash").hidden = !isDash;
   $("view-input").hidden = !isInput;
   $("view-financial").hidden = !isFinancial;
   $("view-program").hidden = !isProgram;
+  if ($("view-peserta")) $("view-peserta").hidden = !isPeserta;
 
   // Control (filter) & judul hanya di dashboard utama
   $("control").style.display = isDash ? "" : "none";
@@ -1326,6 +1328,8 @@ function showView(view) {
     renderInput($("in-program").value);
   } else if (isFinancial) {
     renderFinancial();
+  } else if (isPeserta) {
+    openPesertaView();
   } else {
     // dashboard per program (lihat saja) — data dari DataMasuk
     const p = programByKey(view);
@@ -2241,6 +2245,7 @@ function demoAuth(nama, jab, email, pass, code, msg) {
 
 function loginSuccess(sess) {
   SESSION = sess;
+  PST_RAW = null;
   $("auth-gate").style.display = "none";
   applyAccess();
   setActiveNav(document.querySelector('.nav-item[data-view="dashboard"]'));
@@ -2278,6 +2283,7 @@ function unlockDashboard() {
 
 function logout() {
   SESSION = null;
+  PST_RAW = null;
   try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
   $("profile-modal").hidden = true;
   $("a-pass").value = "";
@@ -2356,6 +2362,7 @@ async function init() {
     render();
   } catch (e) { console.error("Gagal muat data:", e); }
 
+  initPesertaView();
   $("btn-simpan").addEventListener("click", simpan);
   $("in-program").addEventListener("change", () => renderInput($("in-program").value));
   $("btn-refresh").addEventListener("click", async () => { await loadFlex(); await loadData(); rebuildFilters(); render(); });
@@ -2383,6 +2390,337 @@ async function init() {
   loadFlex();
   ["flt-program", "flt-tahun", "flt-bulan", "flt-fase", "flt-kegiatan", "flt-level"].forEach((id) =>
     $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
+}
+
+// ============================================================
+//  DASHBOARD PESERTA
+//  Sumber: tab Google Sheets yang namanya diawali "Peserta" (mis. Peserta_SIAP).
+//  Kolom ujian dibaca OTOMATIS dari header:
+//    "Nilai Akhir_10_07_2026" + "Indeks_10_07_2026"  -> ujian tanggal 10 Juli 2026
+//  Ujian baru cukup ditambah 2 kolom ke kanan dengan pola yang sama.
+// ============================================================
+let PST_RAW = null;      // [{tab, header, rows}]
+let PST_ERR = "";
+let PST_SORT = "ujian";
+let PST_RANK_ALL = false;
+let PST_LIST_N = 50;
+let chartPstTren = null, chartPstIdx = null, chartPstProv = null, chartPstFak = null;
+const PST_BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+const PST_IDX_ORDER = ["A", "AB", "B", "BC", "C", "D", "E", "T"];
+const PST_IDX_LOW = { D: 1, E: 1, T: 1 };
+
+function pstEsc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function pstNum(v) {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim().replace(",", ".");
+  if (s === "" || s === "-") return null;
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+async function loadPeserta() {
+  PST_ERR = "";
+  if (!API_URL) { PST_RAW = PST_RAW || []; return; }
+  if (!SESSION || !SESSION.token) { PST_ERR = "Silakan login dulu."; return; }
+  try {
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "read_peserta", token: SESSION.token }) });
+    const out = await res.json();
+    if (out.ok) PST_RAW = out.tabs || [];
+    else PST_ERR = out.error || "Gagal memuat data peserta.";
+  } catch (e) {
+    console.error("read_peserta gagal:", e);
+    PST_ERR = "Gagal terhubung ke server. Pastikan Code.gs terbaru (ada read_peserta) sudah di-deploy.";
+  }
+}
+
+// ---- baca header -> index kolom + daftar ujian ----
+function pstNormHead(h) { return String(h || "").toLowerCase().replace(/\s*\/\s*/g, "/").replace(/\s+/g, " ").trim(); }
+function pstFindCol(headN, names) {
+  for (const n of names) { const i = headN.indexOf(pstNormHead(n)); if (i >= 0) return i; }
+  return -1;
+}
+const PST_EXAM_RE = /^(nilai(?:[\s_]*akhir)?|indeks)[\s_]+(\d{1,2})[\s_.\-\/]+(\d{1,2})[\s_.\-\/]+(\d{2,4})$/i;
+function pstExamKey(d, m, y) {
+  y = +y; if (y < 100) y += 2000;
+  return y + "-" + String(+m).padStart(2, "0") + "-" + String(+d).padStart(2, "0");
+}
+function pstExamLabel(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  return d + " " + (PST_BULAN[m - 1] || m) + " " + y;
+}
+
+function pstParse() {
+  const people = [];
+  const examSet = {};
+  (PST_RAW || []).forEach((t) => {
+    const header = t.header || [];
+    const headN = header.map(pstNormHead);
+    const col = {
+      pic: pstFindCol(headN, ["PIC"]),
+      prog: pstFindCol(headN, ["Program"]),
+      periode: pstFindCol(headN, ["Periode"]),
+      akt: pstFindCol(headN, ["Aktivitas", "Nama Kegiatan", "Kegiatan"]),
+      nama: pstFindCol(headN, ["Nama Peserta", "Nama"]),
+      prov: pstFindCol(headN, ["Provinsi"]),
+      sek: pstFindCol(headN, ["Nama Sekolah", "Nama Sekolah / Instansi", "Asal Sekolah", "Sekolah", "Instansi"]),
+      fak: pstFindCol(headN, ["Fakultas/Jurusan", "Fakultas", "Jurusan"]),
+      skema: pstFindCol(headN, ["Skema"]),
+      tipe: pstFindCol(headN, ["Tipe"]),
+      kel: pstFindCol(headN, ["Kelompok Peserta", "Kelompok"]),
+      id: pstFindCol(headN, ["ID Peserta"]),
+    };
+    // kolom ujian dari header
+    const exams = {};   // key -> {nilai: idx, indeks: idx}
+    header.forEach((h, i) => {
+      const m = PST_EXAM_RE.exec(String(h || "").trim());
+      if (!m) return;
+      const key = pstExamKey(m[2], m[3], m[4]);
+      exams[key] = exams[key] || {};
+      if (/^indeks/i.test(m[1])) exams[key].indeks = i; else exams[key].nilai = i;
+    });
+    Object.keys(exams).forEach((k) => { examSet[k] = 1; });
+    const tabProg = String(t.tab || "").replace(/^peserta[\s_\-]*/i, "").trim();
+    const get = (r, i) => (i >= 0 && r[i] !== undefined && r[i] !== null) ? String(r[i]).trim() : "";
+    // isi-turun (fill down) PIC/Program/Periode/Aktivitas dari baris di atasnya
+    let last = { pic: "", prog: "", periode: "", akt: "" };
+    (t.rows || []).forEach((r) => {
+      const nama = get(r, col.nama);
+      ["pic", "prog", "periode", "akt"].forEach((f) => { const v = get(r, col[f]); if (v) last[f] = v; });
+      if (!nama) return;
+      const n = {};
+      Object.keys(exams).forEach((k) => {
+        const e = exams[k];
+        const v = e.nilai !== undefined ? pstNum(r[e.nilai]) : null;
+        const ix = e.indeks !== undefined ? get(r, e.indeks).toUpperCase() : "";
+        if (v !== null || ix) n[k] = { v: v, idx: ix };
+      });
+      const progRaw = last.prog || tabProg;
+      people.push({
+        id: get(r, col.id), nama: nama, pic: last.pic, periode: last.periode, akt: last.akt,
+        prog: progRaw ? labelOf(keyFromStored(progRaw)) : "(tanpa program)",
+        prov: get(r, col.prov), sek: get(r, col.sek), fak: get(r, col.fak),
+        skema: get(r, col.skema), tipe: get(r, col.tipe), kel: get(r, col.kel), n: n,
+      });
+    });
+  });
+  const examKeys = Object.keys(examSet).sort();
+  return { people, examKeys };
+}
+
+// ---- filter ----
+const PST_FILTERS = [
+  ["pf-program", "prog"], ["pf-periode", "periode"], ["pf-aktivitas", "akt"], ["pf-provinsi", "prov"],
+  ["pf-fakultas", "fak"], ["pf-skema", "skema"], ["pf-tipe", "tipe"], ["pf-kelompok", "kel"],
+];
+function pstUniq(arr) { return [...new Set(arr.filter((x) => x !== ""))].sort((a, b) => a.localeCompare(b, "id", { numeric: true })); }
+function pstRebuildFilters(people, examKeys) {
+  // filter bertingkat: opsi tiap filter dihitung dari data yang lolos filter lain (kecuali dirinya)
+  PST_FILTERS.forEach(([id, f]) => {
+    const sel = $(id); if (!sel) return;
+    const others = people.filter((p) => PST_FILTERS.every(([id2, f2]) => {
+      if (id2 === id) return true;
+      const v = selValue($(id2)); return v === "Semua" || p[f2] === v;
+    }));
+    fillSelect(sel, ["Semua"].concat(pstUniq(others.map((p) => p[f]))), selValue(sel));
+  });
+  const su = $("pf-ujian");
+  if (su) {
+    const keep = su.value;
+    const opts = [["__LAST__", "Terbaru (yang sudah ada nilai)"]].concat(examKeys.slice().reverse().map((k) => [k, pstExamLabel(k)]));
+    su.innerHTML = opts.map(([v, t]) => `<option value="${v}" ${v === keep ? "selected" : ""}>${pstEsc(t)}</option>`).join("");
+    if (!opts.some(([v]) => v === keep)) su.value = "__LAST__";
+  }
+}
+function pstApplyFilters(people) {
+  return people.filter((p) => PST_FILTERS.every(([id, f]) => { const v = selValue($(id)); return v === "Semua" || p[f] === v; }));
+}
+
+// ---- statistik per peserta ----
+function pstStats(p, examKeys) {
+  const vals = examKeys.map((k) => (p.n[k] && p.n[k].v !== null) ? p.n[k].v : null).filter((v) => v !== null);
+  const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  const naik = vals.length >= 2 ? vals[vals.length - 1] - vals[0] : null;
+  return { avg, naik, count: vals.length };
+}
+function pstFmt(v, d) { return v === null || v === undefined ? "–" : (d ? v.toFixed(d) : String(Math.round(v * 10) / 10)); }
+function pstIdxChip(ix) { return ix ? `<span class="idx-chip ${PST_IDX_LOW[ix] ? "low" : ""}">${pstEsc(ix)}</span>` : '<span class="nil-muted">–</span>'; }
+
+function renderPesertaView() {
+  const msg = $("pst-msg");
+  const { people, examKeys } = pstParse();
+  pstRebuildFilters(people, examKeys);
+  const rows = pstApplyFilters(people);
+
+  // ujian yang dipakai (terbaru yg ada nilainya di data terfilter, atau pilihan user)
+  const withData = examKeys.filter((k) => rows.some((p) => p.n[k] && p.n[k].v !== null));
+  let uj = $("pf-ujian") ? $("pf-ujian").value : "__LAST__";
+  if (uj === "__LAST__" || !examKeys.includes(uj)) uj = withData.length ? withData[withData.length - 1] : (examKeys[examKeys.length - 1] || "");
+  const ujLabel = uj ? pstExamLabel(uj) : "–";
+
+  if (msg) {
+    if (PST_ERR) { msg.innerHTML = "⚠️ " + pstEsc(PST_ERR); msg.style.color = "var(--red)"; }
+    else if (!PST_RAW || !PST_RAW.length) {
+      msg.innerHTML = "Belum ada data. Buat tab di Google Sheets dengan nama diawali <b>Peserta</b> (mis. <b>Peserta_SIAP</b>), " +
+        "header baris 1: PIC, Program, Periode, Aktivitas, Nama Peserta, Provinsi, Nama Sekolah, Fakultas/Jurusan, Skema, Tipe, Kelompok Peserta, " +
+        "lalu kolom ujian <b>Nilai Akhir_dd_mm_yyyy</b> dan <b>Indeks_dd_mm_yyyy</b>.";
+      msg.style.color = "";
+    } else {
+      msg.textContent = `${people.length} peserta dari ${PST_RAW.length} tab · ${examKeys.length} tanggal ujian terbaca: ` +
+        (examKeys.map(pstExamLabel).join(", ") || "belum ada kolom ujian");
+      msg.style.color = "";
+    }
+  }
+
+  // KPI
+  const nilaiUj = rows.map((p) => (p.n[uj] && p.n[uj].v !== null) ? p.n[uj].v : null).filter((v) => v !== null);
+  const avgUj = nilaiUj.length ? nilaiUj.reduce((a, b) => a + b, 0) / nilaiUj.length : null;
+  $("pk-total").textContent = rows.length.toLocaleString("id-ID");
+  $("pk-prov").textContent = pstUniq(rows.map((p) => p.prov)).length;
+  $("pk-sek").textContent = pstUniq(rows.map((p) => p.sek)).length;
+  $("pk-ujian").textContent = withData.length + (examKeys.length > withData.length ? " / " + examKeys.length : "");
+  $("pk-avg").textContent = avgUj === null ? "–" : avgUj.toFixed(1);
+  $("pk-avg-lab").textContent = "Rata-rata Nilai · " + ujLabel;
+  $("pk-dinilai").textContent = rows.length ? nilaiUj.length + " / " + rows.length : "–";
+
+  pstCharts(rows, examKeys, uj, ujLabel);
+  pstRenderRanking(rows, examKeys, uj, ujLabel);
+  pstRenderList(rows, examKeys);
+}
+
+function pstCharts(rows, examKeys, uj, ujLabel) {
+  if (typeof Chart === "undefined") return;
+  const NAVY = "#204074", BLUE = "#3a6db0", ORANGE = "#E08A2E";
+  // 1) tren rata-rata per ujian
+  const tren = examKeys.map((k) => {
+    const v = rows.map((p) => (p.n[k] && p.n[k].v !== null) ? p.n[k].v : null).filter((x) => x !== null);
+    return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10 : null;
+  });
+  const cnt = examKeys.map((k) => rows.filter((p) => p.n[k] && p.n[k].v !== null).length);
+  const c1 = $("pst-chart-tren");
+  if (c1) {
+    if (chartPstTren) chartPstTren.destroy();
+    chartPstTren = new Chart(c1, {
+      type: "bar",
+      data: { labels: examKeys.length ? examKeys.map(pstExamLabel) : ["(belum ada ujian)"],
+        datasets: [{ label: "Rata-rata nilai", data: tren, backgroundColor: examKeys.map((k) => k === uj ? NAVY : BLUE), borderRadius: 6, maxBarThickness: 70 }] },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `Rata-rata ${c.parsed.y} · ${cnt[c.dataIndex]} peserta dinilai` } } },
+        scales: { y: { beginAtZero: true, suggestedMax: 100, title: { display: true, text: "Nilai" } } } },
+    });
+  }
+  // 2) distribusi indeks ujian terpilih
+  const idxCount = {};
+  rows.forEach((p) => { const ix = p.n[uj] && p.n[uj].idx; if (ix) idxCount[ix] = (idxCount[ix] || 0) + 1; });
+  const idxLabels = PST_IDX_ORDER.filter((x) => idxCount[x] || ["A", "AB", "B", "BC", "C", "D", "E"].includes(x))
+    .concat(Object.keys(idxCount).filter((x) => !PST_IDX_ORDER.includes(x)).sort());
+  if ($("pst-indeks-sub")) $("pst-indeks-sub").textContent = "Jumlah peserta per indeks · ujian " + ujLabel;
+  const c2 = $("pst-chart-indeks");
+  if (c2) {
+    if (chartPstIdx) chartPstIdx.destroy();
+    chartPstIdx = new Chart(c2, {
+      type: "bar",
+      data: { labels: idxLabels, datasets: [{ label: "Peserta", data: idxLabels.map((x) => idxCount[x] || 0),
+        backgroundColor: idxLabels.map((x) => PST_IDX_LOW[x] ? ORANGE : NAVY), borderRadius: 6, maxBarThickness: 70 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+    });
+  }
+  // 3 & 4) sebaran provinsi / fakultas (horizontal, top 10)
+  const topBar = (canvas, prev, field) => {
+    const m = {};
+    rows.forEach((p) => { const v = p[field] || "(kosong)"; m[v] = (m[v] || 0) + 1; });
+    const top = Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    if (prev) prev.destroy();
+    if (!canvas) return null;
+    return new Chart(canvas, {
+      type: "bar",
+      data: { labels: top.length ? top.map((x) => x[0]) : ["(kosong)"], datasets: [{ label: "Peserta", data: top.map((x) => x[1]), backgroundColor: BLUE, borderRadius: 5, maxBarThickness: 34 }] },
+      options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } },
+    });
+  };
+  chartPstProv = topBar($("pst-chart-prov"), chartPstProv, "prov");
+  chartPstFak = topBar($("pst-chart-fak"), chartPstFak, "fak");
+}
+
+function pstRenderRanking(rows, examKeys, uj, ujLabel) {
+  const tbl = $("pst-rank"); if (!tbl) return;
+  const metricName = { ujian: "Nilai " + ujLabel, rata: "Rata-rata", naik: "Kenaikan" }[PST_SORT];
+  const scored = rows.map((p) => {
+    const st = pstStats(p, examKeys);
+    const val = PST_SORT === "ujian" ? ((p.n[uj] && p.n[uj].v !== null) ? p.n[uj].v : null)
+      : PST_SORT === "rata" ? st.avg : st.naik;
+    return { p, st, val };
+  }).filter((x) => x.val !== null).sort((a, b) => b.val - a.val || a.p.nama.localeCompare(b.p.nama));
+  // ranking kompetisi: nilai sama = ranking sama
+  let prevVal = null, prevRank = 0;
+  scored.forEach((x, i) => { x.rank = (prevVal !== null && x.val === prevVal) ? prevRank : i + 1; prevVal = x.val; prevRank = x.rank; });
+
+  if ($("pst-rank-sub")) $("pst-rank-sub").textContent = scored.length
+    ? `Diurutkan menurut ${metricName.charAt(0).toLowerCase() + metricName.slice(1)} · ${scored.length} peserta punya nilai` + (PST_SORT === "naik" ? " (minimal 2 ujian)" : "")
+    : "Belum ada peserta dengan nilai untuk urutan ini.";
+  const show = PST_RANK_ALL ? scored : scored.slice(0, 10);
+  tbl.querySelector("thead").innerHTML = "<tr><th>Ranking</th><th>Nama Peserta</th><th>Program</th><th>Sekolah</th><th>Provinsi</th>" +
+    "<th>Fakultas/Jurusan</th><th>Kelompok</th><th>Indeks " + pstEsc(ujLabel) + "</th>" +
+    examKeys.map((k) => `<th>${pstEsc(pstExamLabel(k))}</th>`).join("") + `<th>${pstEsc(metricName)}</th></tr>`;
+  tbl.querySelector("tbody").innerHTML = show.map((x) => {
+    const p = x.p, top = x.rank <= 3;
+    const valTxt = PST_SORT === "naik" ? (x.val > 0 ? "+" : "") + pstFmt(x.val) : pstFmt(x.val, PST_SORT === "rata" ? 1 : 0);
+    return `<tr class="${top ? "rank-top" : ""}"><td><span class="rank-no ${top ? "top" : ""}">${x.rank}</span></td>` +
+      `<td><b>${pstEsc(p.nama)}</b></td><td>${pstEsc(p.prog)}</td><td>${pstEsc(p.sek || "–")}</td><td>${pstEsc(p.prov || "–")}</td>` +
+      `<td>${pstEsc(p.fak || "–")}</td><td>${pstEsc(p.kel || "–")}</td><td>${pstIdxChip(p.n[uj] && p.n[uj].idx)}</td>` +
+      examKeys.map((k) => `<td class="${p.n[k] && p.n[k].v !== null ? "" : "nil-muted"}">${pstFmt(p.n[k] ? p.n[k].v : null)}</td>`).join("") +
+      `<td class="pst-val">${valTxt}</td></tr>`;
+  }).join("") || `<tr><td colspan="${9 + examKeys.length}" class="nil-muted">Belum ada data nilai.</td></tr>`;
+  const more = $("pst-rank-more");
+  if (more) {
+    more.hidden = scored.length <= 10;
+    more.textContent = PST_RANK_ALL ? "Tampilkan 10 teratas saja" : `Tampilkan semua (${scored.length} peserta)`;
+  }
+}
+
+function pstRenderList(rows, examKeys) {
+  const tbl = $("pst-list"); if (!tbl) return;
+  const q = ($("pst-search") ? $("pst-search").value : "").trim().toLowerCase();
+  const list = q ? rows.filter((p) => [p.nama, p.sek, p.kel, p.prov, p.fak, p.id].join(" ").toLowerCase().includes(q)) : rows;
+  if ($("pst-list-sub")) $("pst-list-sub").textContent = `${list.length} peserta` + (q ? ` cocok dengan "${q}"` : "");
+  tbl.querySelector("thead").innerHTML = "<tr><th>No</th><th>Nama Peserta</th><th>PIC</th><th>Program</th><th>Periode</th><th>Aktivitas</th>" +
+    "<th>Provinsi</th><th>Nama Sekolah</th><th>Fakultas/Jurusan</th><th>Skema</th><th>Tipe</th><th>Kelompok</th>" +
+    examKeys.map((k) => `<th>${pstEsc(pstExamLabel(k))}</th>`).join("") + "</tr>";
+  tbl.querySelector("tbody").innerHTML = list.slice(0, PST_LIST_N).map((p, i) =>
+    `<tr><td>${i + 1}</td><td><b>${pstEsc(p.nama)}</b></td><td>${pstEsc(p.pic)}</td><td>${pstEsc(p.prog)}</td><td>${pstEsc(p.periode)}</td>` +
+    `<td>${pstEsc(p.akt)}</td><td>${pstEsc(p.prov)}</td><td>${pstEsc(p.sek)}</td><td>${pstEsc(p.fak)}</td><td>${pstEsc(p.skema)}</td>` +
+    `<td>${pstEsc(p.tipe)}</td><td>${pstEsc(p.kel)}</td>` +
+    examKeys.map((k) => { const e = p.n[k]; return e ? `<td>${pstFmt(e.v)} ${pstIdxChip(e.idx)}</td>` : '<td class="nil-muted">–</td>'; }).join("") +
+    "</tr>").join("") || `<tr><td colspan="${12 + examKeys.length}" class="nil-muted">Tidak ada peserta.</td></tr>`;
+  const more = $("pst-list-more");
+  if (more) { more.hidden = list.length <= PST_LIST_N; more.textContent = `Tampilkan lebih banyak (${list.length - PST_LIST_N} lagi)`; }
+}
+
+async function openPesertaView() {
+  if (PST_RAW === null) {
+    if ($("pst-msg")) { $("pst-msg").textContent = "⏳ Memuat data peserta…"; $("pst-msg").style.color = ""; }
+    await loadPeserta();
+  }
+  renderPesertaView();
+}
+
+function initPesertaView() {
+  PST_FILTERS.concat([["pf-ujian"]]).forEach(([id]) => { if ($(id)) $(id).addEventListener("change", () => { PST_LIST_N = 50; renderPesertaView(); }); });
+  if ($("pst-refresh")) $("pst-refresh").addEventListener("click", async () => {
+    const b = $("pst-refresh"); const t = b.textContent; b.textContent = "⏳ Memuat...";
+    await loadPeserta(); renderPesertaView(); b.textContent = t;
+  });
+  document.querySelectorAll("#pst-sort .prog-tab").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll("#pst-sort .prog-tab").forEach((x) => x.classList.toggle("active", x === b));
+    PST_SORT = b.dataset.sort; renderPesertaView();
+  }));
+  if ($("pst-rank-more")) $("pst-rank-more").addEventListener("click", () => { PST_RANK_ALL = !PST_RANK_ALL; renderPesertaView(); });
+  if ($("pst-list-more")) $("pst-list-more").addEventListener("click", () => { PST_LIST_N += 50; renderPesertaView(); });
+  if ($("pst-search")) $("pst-search").addEventListener("input", () => { PST_LIST_N = 50; renderPesertaView(); });
 }
 
 window.addEventListener("DOMContentLoaded", init);
