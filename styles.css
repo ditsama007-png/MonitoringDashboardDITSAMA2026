@@ -394,3 +394,19 @@ canvas { max-width: 100% !important; }
 /* Menu link eksternal (SUGT) */
 a.nav-item.nav-ext{text-decoration:none;color:#EAF1FB;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between}
 a.nav-item.nav-ext .ext-ic{font-size:.85rem;opacity:.8}
+
+/* ---------------- Dashboard Peserta ---------------- */
+.pst-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}
+.pst-filters label{margin:0}
+.pst-filters .btn-ghost{margin:0;border:1px solid var(--line)}
+.pst-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:.6rem}
+.pst-head .sub{margin-bottom:0}
+.rank-no{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;
+  background:#EAF1FB;color:var(--navy);font-weight:800;font-size:.78rem}
+.rank-no.top{background:var(--navy);color:#fff}
+tr.rank-top td{background:#F4F8FD}
+.idx-chip{display:inline-block;min-width:26px;text-align:center;padding:1px 6px;border-radius:6px;font-weight:800;font-size:.75rem;
+  background:#DBE8FB;color:var(--navy)}
+.idx-chip.low{background:#FDE8D4;color:#8A4B0F}
+.nil-muted{color:#9AA3B2}
+.pst-val{font-weight:800;color:var(--navy)}
