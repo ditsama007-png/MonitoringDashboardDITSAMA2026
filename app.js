@@ -2462,6 +2462,37 @@ function pstExamLabel(key) {
   return d + " " + (PST_BULAN[m - 1] || m) + " " + y;
 }
 
+// ---- standarisasi nama provinsi (isian bebas -> nama baku) ----
+const PST_PROV_BAKU = ["Aceh","Sumatera Utara","Sumatera Barat","Riau","Kepulauan Riau","Jambi","Sumatera Selatan",
+  "Kepulauan Bangka Belitung","Bengkulu","Lampung","DKI Jakarta","Banten","Jawa Barat","Jawa Tengah","DI Yogyakarta",
+  "Jawa Timur","Bali","Nusa Tenggara Barat","Nusa Tenggara Timur","Kalimantan Barat","Kalimantan Tengah","Kalimantan Selatan",
+  "Kalimantan Timur","Kalimantan Utara","Sulawesi Utara","Gorontalo","Sulawesi Tengah","Sulawesi Barat","Sulawesi Selatan",
+  "Sulawesi Tenggara","Maluku","Maluku Utara","Papua","Papua Barat","Papua Barat Daya","Papua Tengah","Papua Pegunungan",
+  "Papua Selatan","Luar Negeri"];
+function pstProvKey(s) {
+  return String(s || "").toLowerCase().replace(/\d+/g, "").trim()
+    .replace(/^(provinsi|prov\.?)\s*/, "").replace(/sumatra/g, "sumatera").replace(/kep\./g, "kepulauan ")
+    .replace(/[^a-z]/g, "");
+}
+const PST_PROV_MAP = (() => {
+  const m = {};
+  PST_PROV_BAKU.forEach((p) => { m[pstProvKey(p)] = p; });
+  Object.assign(m, {
+    dki: "DKI Jakarta", jakarta: "DKI Jakarta", dkjakarta: "DKI Jakarta", daerahkhususibukotajakarta: "DKI Jakarta",
+    jakartaselatan: "DKI Jakarta", jakartapusat: "DKI Jakarta", jakartabarat: "DKI Jakarta", jakartatimur: "DKI Jakarta", jakartautara: "DKI Jakarta",
+    jabar: "Jawa Barat", westjava: "Jawa Barat", bogor: "Jawa Barat", depok: "Jawa Barat", bandung: "Jawa Barat", bekasi: "Jawa Barat",
+    jateng: "Jawa Tengah", centraljava: "Jawa Tengah", jatim: "Jawa Timur", eastjava: "Jawa Timur", jawatimue: "Jawa Timur",
+    tangerang: "Banten", tangerangselatan: "Banten", diy: "DI Yogyakarta", yogyakarta: "DI Yogyakarta", jogja: "DI Yogyakarta",
+    daerahistimewayogyakarta: "DI Yogyakarta", bangkabelitung: "Kepulauan Bangka Belitung", babel: "Kepulauan Bangka Belitung",
+    malaysia: "Luar Negeri", madinah: "Luar Negeri",
+  });
+  return m;
+})();
+function pstNormProv(s) {
+  const raw = String(s || "").trim();
+  if (!raw) return "";
+  return PST_PROV_MAP[pstProvKey(raw)] || raw;   // tak dikenal -> biarkan apa adanya
+}
 function pstParse() {
   const people = [];
   const examSet = {};
@@ -2511,7 +2542,7 @@ function pstParse() {
       people.push({
         id: get(r, col.id), nama: nama, pic: last.pic, periode: last.periode, akt: last.akt,
         prog: progRaw ? labelOf(keyFromStored(progRaw)) : "(tanpa program)",
-        prov: get(r, col.prov), sek: get(r, col.sek), fak: get(r, col.fak),
+        prov: pstNormProv(get(r, col.prov)), sek: get(r, col.sek), fak: get(r, col.fak),
         skema: get(r, col.skema), tipe: get(r, col.tipe), kel: get(r, col.kel), n: n,
       });
     });
