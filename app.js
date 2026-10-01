@@ -1046,7 +1046,7 @@ async function hapusMilestone(id, key) {
 function renderNavBadges() {
   document.querySelectorAll('.nav-item[data-view]').forEach((btn) => {
     const v = btn.dataset.view;
-    if (v === "dashboard" || v === "input" || v === "financial" || v === "peserta") return;
+    if (v === "dashboard" || v === "input" || v === "financial" || v === "peserta" || v === "dosen") return;
     // bersihkan badge lama
     btn.querySelectorAll(".nav-badge").forEach((b) => b.remove());
     const nUp = upcomingMilestones(v).length;
@@ -1307,13 +1307,15 @@ function showView(view) {
   const isInput = view === "input";
   const isFinancial = view === "financial";
   const isPeserta = view === "peserta";
-  const isProgram = !isDash && !isInput && !isFinancial && !isPeserta;
+  const isDosen = view === "dosen";
+  const isProgram = !isDash && !isInput && !isFinancial && !isPeserta && !isDosen;
 
   $("view-dash").hidden = !isDash;
   $("view-input").hidden = !isInput;
   $("view-financial").hidden = !isFinancial;
   $("view-program").hidden = !isProgram;
   if ($("view-peserta")) $("view-peserta").hidden = !isPeserta;
+  if ($("view-dosen")) $("view-dosen").hidden = !isDosen;
 
   // Control (filter) & judul hanya di dashboard utama
   $("control").style.display = isDash ? "" : "none";
@@ -1330,6 +1332,8 @@ function showView(view) {
     renderFinancial();
   } else if (isPeserta) {
     openPesertaView();
+  } else if (isDosen) {
+    openDosenView();
   } else {
     // dashboard per program (lihat saja) — data dari DataMasuk
     const p = programByKey(view);
@@ -2245,7 +2249,7 @@ function demoAuth(nama, jab, email, pass, code, msg) {
 
 function loginSuccess(sess) {
   SESSION = sess;
-  PST_RAW = null;
+  PST_RAW = null; DSN_RAW = null;
   $("auth-gate").style.display = "none";
   applyAccess();
   setActiveNav(document.querySelector('.nav-item[data-view="dashboard"]'));
@@ -2283,7 +2287,7 @@ function unlockDashboard() {
 
 function logout() {
   SESSION = null;
-  PST_RAW = null;
+  PST_RAW = null; DSN_RAW = null;
   try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
   $("profile-modal").hidden = true;
   $("a-pass").value = "";
@@ -2363,6 +2367,7 @@ async function init() {
   } catch (e) { console.error("Gagal muat data:", e); }
 
   initPesertaView();
+  initDosenView();
   $("btn-simpan").addEventListener("click", simpan);
   $("in-program").addEventListener("change", () => renderInput($("in-program").value));
   $("btn-refresh").addEventListener("click", async () => { await loadFlex(); await loadData(); rebuildFilters(); render(); });
@@ -2825,6 +2830,283 @@ function initPesertaView() {
   if ($("pst-search")) $("pst-search").addEventListener("input", () => { PST_LIST_N = 50; renderPesertaView(); });
   if ($("pst-sek-search")) $("pst-sek-search").addEventListener("input", renderPesertaView);
   if ($("pst-sek-more")) $("pst-sek-more").addEventListener("click", () => { PST_SEK_ALL = !PST_SEK_ALL; renderPesertaView(); });
+}
+
+// ============================================================
+//  PORTOFOLIO DOSEN
+//  Sumber: tab berawalan "Dosen" (mis. Dosen_SIAP) = hasil Google Form evaluasi apa adanya.
+//  Kolom dosen dikenali dari header: "Evaluasi Dosen Matematika [Nama, gelar]"
+//  atau "Mathematics Lecturer Evaluation [Nama, gelar]". Nilai 1–5; teks lain diabaikan.
+// ============================================================
+let DSN_RAW = null, DSN_ERR = "", DSN_SEL = "", DSN_MAPEL_CLICK = "";
+let chartDsnRank = null, chartDsnMetode = null;
+const DSN_MAPEL = { matematika: "Matematika", mathematics: "Matematika", fisika: "Fisika", physics: "Fisika",
+  kimia: "Kimia", chemistry: "Kimia", biologi: "Biologi", biology: "Biologi" };
+
+async function loadDosen() {
+  DSN_ERR = "";
+  if (!API_URL) { DSN_RAW = DSN_RAW || []; return; }
+  if (!SESSION || !SESSION.token) { DSN_ERR = "Silakan login dulu."; return; }
+  let res, txt = "";
+  try {
+    res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "read_dosen", token: SESSION.token }) });
+    txt = await res.text();
+  } catch (e) { DSN_ERR = "Tidak bisa menghubungi server (" + (e && e.message ? e.message : e) + ")."; return; }
+  let out = null;
+  try { out = JSON.parse(txt); } catch (e) {
+    const plain = txt.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    DSN_ERR = "Server membalas error (HTTP " + (res ? res.status : "?") + "): " + (plain.slice(0, 300) || "(kosong)");
+    return;
+  }
+  if (out.ok) DSN_RAW = out.tabs || [];
+  else DSN_ERR = out.error === "aksi tidak dikenal"
+    ? "Code.gs di server belum versi terbaru (belum ada read_dosen). Tempel Code.gs baru lalu Deploy → New version."
+    : (out.error || "Gagal memuat data dosen.");
+}
+
+// "Dr. Abdul Muizz Tri Pradipto, S.Si., M.Si." -> kunci "abdul muizz tri pradipto"
+function dsnKey(nama) {
+  return String(nama || "").split(",")[0].replace(/\b(prof|dr|drs|dra|ir|hj|h)\.?\s+/gi, "")
+    .toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// bentuk lebar (form) -> daftar penilaian {prog, key, nama, mapel, metode, kelas, bahasa, nilai, peserta}
+function dsnParse() {
+  const evals = [], comments = [];
+  let nResp = 0;
+  (DSN_RAW || []).forEach((t) => {
+    const header = t.header || [];
+    const prog = labelOf(keyFromStored(String(t.tab || "").replace(/^dosen[\s_\-]*/i, "").trim() || "Lainnya"));
+    const find = (re) => header.findIndex((h) => re.test(String(h)));
+    const iNama = find(/nama\s+lengkap|full\s+name/i);
+    const iKelas = find(/^\s*kelas|\bclass\b/i);
+    const commentCols = header.map((h, i) => (/berkesan|positive impression/i.test(String(h)) ? i : -1)).filter((i) => i >= 0);
+    const cols = [];
+    header.forEach((h, i) => {
+      h = String(h || "");
+      if (!/(evaluasi\s+dosen|lecturer\s+evaluation)/i.test(h)) return;
+      const m = /\[(.+)\]/.exec(h); if (!m) return;
+      const w = h.toLowerCase().match(/matematika|mathematics|fisika|physics|kimia|chemistry|biologi|biology/);
+      cols.push({ i, nama: m[1].replace(/\s+/g, " ").trim(), mapel: w ? DSN_MAPEL[w[0]] : "Lainnya",
+        bahasa: /lecturer/i.test(h) ? "English" : "Indonesia" });
+    });
+    (t.rows || []).forEach((r) => {
+      const kelasRaw = iKelas >= 0 ? String(r[iKelas] || "").trim() : "";
+      const kl = kelasRaw.toLowerCase();
+      const metode = /hybrid|hibrida/.test(kl) ? "Hibrida" : /daring|online/.test(kl) ? "Daring" : /luring|on-site|onsite|offline/.test(kl) ? "Luring" : "–";
+      const kelas = kelasRaw.split("||")[0].trim() || "–";
+      const peserta = iNama >= 0 ? String(r[iNama] || "").trim() : "";
+      let any = false;
+      cols.forEach((c) => {
+        const v = r[c.i];
+        const n = parseFloat(String(v === null || v === undefined ? "" : v).replace(",", "."));
+        if (isNaN(n) || n < 1 || n > 5) return;
+        any = true;
+        evals.push({ prog, key: dsnKey(c.nama), nama: c.nama, mapel: c.mapel, metode, kelas, bahasa: c.bahasa, nilai: n, peserta });
+      });
+      if (any) nResp++;
+      commentCols.forEach((ci) => {
+        const txt = String(r[ci] || "").trim();
+        if (txt.length > 3 && !/^(-|tidak ada|none|no)$/i.test(txt)) comments.push({ prog, metode, kelas, txt, peserta });
+      });
+    });
+  });
+  return { evals, comments, nResp };
+}
+
+const DSN_FILTERS = [["df-program", "prog"], ["df-mapel", "mapel"], ["df-metode", "metode"], ["df-kelas", "kelas"], ["df-bahasa", "bahasa"]];
+function dsnPredikat(v) {
+  if (v === null) return ["–", ""];
+  if (v >= 4.5) return ["Sangat Baik", "a"];
+  if (v >= 4) return ["Baik", "b"];
+  if (v >= 3) return ["Cukup", "c"];
+  return ["Perlu Perhatian", "d"];
+}
+function dsnInitials(nama) {
+  const w = dsnKey(nama).split(" ").filter(Boolean);
+  return ((w[0] || "?")[0] + (w.length > 1 ? w[w.length - 1][0] : "")).toUpperCase();
+}
+
+function renderDosenView() {
+  const { evals, comments, nResp } = dsnParse();
+  // filter bertingkat
+  DSN_FILTERS.forEach(([id, f]) => {
+    const sel = $(id); if (!sel) return;
+    const others = evals.filter((e) => DSN_FILTERS.every(([id2, f2]) => id2 === id || selValue($(id2)) === "Semua" || e[f2] === selValue($(id2))));
+    fillSelect(sel, ["Semua"].concat(pstUniq(others.map((e) => e[f]))), selValue(sel));
+  });
+  const rows = evals.filter((e) => DSN_FILTERS.every(([id, f]) => selValue($(id)) === "Semua" || e[f] === selValue($(id))));
+  const minResp = parseInt(($("df-minresp") || {}).value || "1", 10) || 1;
+
+  const msg = $("dsn-msg");
+  if (msg) {
+    if (DSN_ERR) { msg.textContent = "⚠️ " + DSN_ERR; msg.style.color = "var(--red)"; }
+    else if (!DSN_RAW || !DSN_RAW.length) {
+      msg.innerHTML = "Belum ada data. Buat tab berawalan <b>Dosen</b> (mis. <b>Dosen_SIAP</b>) di spreadsheet utama berisi hasil Google Form evaluasi dosen.";
+      msg.style.color = "";
+    } else {
+      msg.textContent = `${DSN_RAW.length} tab (${DSN_RAW.map((t) => t.tab).join(", ")}) · ${nResp} peserta mengisi · ${evals.length} penilaian dosen terbaca`;
+      msg.style.color = "";
+    }
+  }
+
+  // agregasi per dosen
+  const g = {};
+  rows.forEach((e) => {
+    const o = g[e.key] = g[e.key] || { key: e.key, names: {}, mapel: {}, metode: {}, prog: {}, bahasa: {}, vals: [], dist: [0, 0, 0, 0, 0], peserta: {} };
+    o.names[e.nama] = 1; o.mapel[e.mapel] = 1; o.metode[e.metode] = (o.metode[e.metode] || []).concat(e.nilai);
+    o.prog[e.prog] = 1; o.bahasa[e.bahasa] = 1; o.vals.push(e.nilai); o.dist[Math.round(e.nilai) - 1]++;
+    if (e.peserta) o.peserta[e.peserta] = 1;
+  });
+  const avg = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  let dosen = Object.values(g).map((o) => ({
+    ...o, nama: Object.keys(o.names).sort((a, b) => b.length - a.length)[0],
+    avg: avg(o.vals), n: o.vals.length,
+  })).filter((d) => d.n >= minResp)
+    .sort((a, b) => b.avg - a.avg || b.n - a.n || a.nama.localeCompare(b.nama));
+  let pv = null, pr = 0;
+  dosen.forEach((d, i) => { const k = d.avg.toFixed(2); d.rank = (pv === k) ? pr : i + 1; pv = k; pr = d.rank; });
+
+  // KPI
+  const allVals = dosen.flatMap((d) => d.vals);
+  $("dk-dosen").textContent = dosen.length;
+  $("dk-mapel").textContent = pstUniq(dosen.flatMap((d) => Object.keys(d.mapel))).length;
+  $("dk-resp").textContent = pstUniq(rows.map((e) => e.peserta)).length.toLocaleString("id-ID");
+  $("dk-nilai").textContent = allVals.length.toLocaleString("id-ID");
+  $("dk-avg").textContent = allVals.length ? avg(allVals).toFixed(2) : "–";
+  $("dk-top").textContent = dosen.length ? dosen[0].avg.toFixed(2) : "–";
+  $("dk-top-lab").textContent = dosen.length ? "Tertinggi · " + dsnKey(dosen[0].nama).replace(/\b\w/g, (c) => c.toUpperCase()) : "Nilai Tertinggi";
+
+  dsnCharts(dosen, rows);
+  dsnMapelCards(dosen);
+  dsnTable(dosen, minResp);
+  dsnDetail(dosen, evals, comments);
+}
+
+function dsnCharts(dosen, rows) {
+  if (typeof Chart === "undefined") return;
+  const short = (n) => dsnKey(n).replace(/\b\w/g, (c) => c.toUpperCase());
+  const top = dosen.slice(0, 15);
+  const wrap = $("dsn-rank-wrap"); if (wrap) wrap.style.height = Math.max(220, top.length * 26 + 50) + "px";
+  if (chartDsnRank) chartDsnRank.destroy();
+  if ($("dsn-chart-rank")) chartDsnRank = new Chart($("dsn-chart-rank"), {
+    type: "bar",
+    data: { labels: top.length ? top.map((d) => short(d.nama)) : ["(belum ada data)"],
+      datasets: [{ label: "Rata-rata", data: top.map((d) => Math.round(d.avg * 100) / 100),
+        backgroundColor: top.map((d, i) => (i < 3 ? "#204074" : "#3a6db0")), borderRadius: 5, maxBarThickness: 22 }] },
+    options: { indexAxis: "y", responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `Rata-rata ${c.parsed.x} · ${top[c.dataIndex].n} penilaian · ${Object.keys(top[c.dataIndex].mapel).join(", ")}` } } },
+      scales: { x: { min: 1, max: 5, ticks: { stepSize: 1 } } },
+      onClick: (_e, el) => { if (el.length) { DSN_SEL = top[el[0].index].key; renderDosenView(); $("dsn-detail").scrollIntoView({ behavior: "smooth" }); } } },
+  });
+  // rata-rata per mapel x metode
+  const mapels = pstUniq(rows.map((e) => e.mapel)), metodes = pstUniq(rows.map((e) => e.metode));
+  const COL = { Luring: "#204074", Hibrida: "#9EC1E6", Daring: "#E08A2E", "–": "#B7C3D6" };
+  if (chartDsnMetode) chartDsnMetode.destroy();
+  if ($("dsn-chart-metode")) chartDsnMetode = new Chart($("dsn-chart-metode"), {
+    type: "bar",
+    data: { labels: mapels.length ? mapels : ["(belum ada data)"], datasets: metodes.map((m) => ({
+      label: m, backgroundColor: COL[m] || "#3a6db0", borderRadius: 5, maxBarThickness: 40,
+      data: mapels.map((mp) => { const v = rows.filter((e) => e.mapel === mp && e.metode === m).map((e) => e.nilai); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length * 100) / 100 : null; }),
+    })) },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top" } },
+      scales: { y: { min: 1, max: 5, ticks: { stepSize: 1 }, title: { display: true, text: "Rata-rata nilai" } } } },
+  });
+}
+
+function dsnMapelCards(dosen) {
+  const el = $("dsn-mapel-cards"); if (!el) return;
+  const by = {};
+  dosen.forEach((d) => Object.keys(d.mapel).forEach((m) => { (by[m] = by[m] || []).push(d); }));
+  const cur = selValue($("df-mapel"));
+  el.innerHTML = Object.keys(by).sort().map((m) => {
+    const list = by[m].slice().sort((a, b) => b.avg - a.avg);
+    const vals = list.flatMap((d) => d.vals);
+    return `<button type="button" class="dsn-card ${cur === m ? "active" : ""}" data-mapel="${pstEsc(m)}">` +
+      `<h4>${pstEsc(m)} <span class="chip">${list.length} dosen</span></h4>` +
+      `<div class="stat"><div><b>${list[0].avg.toFixed(2)}</b><span>Tertinggi</span></div><div><b>${(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2)}</b><span>Rata-rata</span></div><div><b>${vals.length}</b><span>Penilaian</span></div></div>` +
+      `<ol>${list.slice(0, 5).map((d) => `<li>${pstEsc(dsnKey(d.nama).replace(/\b\w/g, (c) => c.toUpperCase()))} · <b>${d.avg.toFixed(2)}</b></li>`).join("")}</ol>` +
+      (list.length > 5 ? `<div class="nil-muted" style="font-size:.75rem">+${list.length - 5} dosen lain</div>` : "") + `</button>`;
+  }).join("") || '<div class="nil-muted">Belum ada data.</div>';
+  el.querySelectorAll(".dsn-card").forEach((b) => b.addEventListener("click", () => {
+    const sel = $("df-mapel"); const m = b.dataset.mapel;
+    sel.value = selValue(sel) === m ? "Semua" : m; renderDosenView();
+  }));
+}
+
+function dsnTable(dosen, minResp) {
+  const tbl = $("dsn-table"); if (!tbl) return;
+  const q = ($("dsn-search") ? $("dsn-search").value : "").trim().toLowerCase();
+  const list = q ? dosen.filter((d) => d.nama.toLowerCase().includes(q)) : dosen;
+  if ($("dsn-rank-sub")) $("dsn-rank-sub").textContent = `${dosen.length} dosen` + (minResp > 1 ? ` (minimal ${minResp} penilaian)` : "") + " · klik baris untuk melihat portofolio";
+  tbl.querySelector("thead").innerHTML = "<tr><th>Ranking</th><th>Nama Dosen</th><th>Mata Kuliah</th><th>Metode</th><th>Program</th>" +
+    "<th>Penilaian</th><th>Sebaran 1–5</th><th>Rata-rata</th><th>Predikat</th></tr>";
+  tbl.querySelector("tbody").innerHTML = list.map((d) => {
+    const [pt, pc] = dsnPredikat(d.avg);
+    const mx = Math.max(...d.dist, 1);
+    const top3 = d.rank <= 3;
+    return `<tr class="dsn-row ${DSN_SEL === d.key ? "sel" : ""} ${top3 ? "rank-top" : ""}" data-key="${pstEsc(d.key)}">` +
+      `<td><span class="rank-no ${top3 ? "top" : ""}">${d.rank}</span></td><td><b>${pstEsc(d.nama)}</b></td>` +
+      `<td>${pstEsc(Object.keys(d.mapel).join(", "))}</td><td>${pstEsc(Object.keys(d.metode).join(", "))}</td>` +
+      `<td>${pstEsc(Object.keys(d.prog).join(", "))}</td><td>${d.n}</td>` +
+      `<td title="1:${d.dist[0]} · 2:${d.dist[1]} · 3:${d.dist[2]} · 4:${d.dist[3]} · 5:${d.dist[4]}"><span class="dist">${d.dist.map((c) => `<i style="height:${Math.round(c / mx * 20) + 2}px"></i>`).join("")}</span></td>` +
+      `<td class="pst-val">${d.avg.toFixed(2)}</td><td><span class="pred ${pc}">${pt}</span></td></tr>`;
+  }).join("") || '<tr><td colspan="9" class="nil-muted">Belum ada data penilaian dosen.</td></tr>';
+  tbl.querySelectorAll(".dsn-row").forEach((tr) => tr.addEventListener("click", () => {
+    DSN_SEL = DSN_SEL === tr.dataset.key ? "" : tr.dataset.key; renderDosenView();
+    if (DSN_SEL) $("dsn-detail").scrollIntoView({ behavior: "smooth" });
+  }));
+}
+
+function dsnDetail(dosen, evals, comments) {
+  const box = $("dsn-detail"); if (!box) return;
+  const d = dosen.find((x) => x.key === DSN_SEL);
+  if (!d) { box.hidden = true; return; }
+  box.hidden = false;
+  const [pt] = dsnPredikat(d.avg);
+  const nice = dsnKey(d.nama).replace(/\b\w/g, (c) => c.toUpperCase());
+  // komentar "dosen paling berkesan" yang menyebut dosen ini (nama lengkap, atau kata khas ≥5 huruf yg hanya milik dosen ini)
+  const allTok = {};
+  pstUniq(evals.map((e) => e.key)).forEach((k) => k.split(" ").forEach((w) => { allTok[w] = (allTok[w] || 0) + 1; }));
+  const myTok = d.key.split(" ").filter((w) => w.length >= 5 && allTok[w] === 1);
+  const mine = comments.filter((c) => { const t = c.txt.toLowerCase(); return t.includes(d.key) || myTok.some((w) => new RegExp("\\b" + w + "\\b").test(t)); });
+  const perMetode = Object.entries(d.metode).map(([m, v]) => `<tr><td>${pstEsc(m)}</td><td>${v.length}</td><td class="pst-val">${(v.reduce((a, b) => a + b, 0) / v.length).toFixed(2)}</td></tr>`).join("");
+  const mx = Math.max(...d.dist, 1);
+  box.innerHTML =
+    `<div class="dsn-prof"><div class="ava">${pstEsc(dsnInitials(d.nama))}</div><div style="flex:1"><h3>${pstEsc(d.nama)}</h3>` +
+    `<div class="tags">${Object.keys(d.mapel).concat(Object.keys(d.metode), Object.keys(d.prog)).map((x) => `<span>${pstEsc(x)}</span>`).join("")}</div></div>` +
+    `<div style="text-align:right"><div style="font-size:.75rem;opacity:.8">Predikat</div><div style="font-size:1.15rem;font-weight:800">${pt}</div></div>` +
+    `<button type="button" class="btn-ghost" id="dsn-close" style="margin:0 0 0 8px">✕</button></div>` +
+    `<div class="kpi-row">` +
+    `<div class="kpi"><div class="kpi-val">${d.avg.toFixed(2)}</div><div class="kpi-lab">Rata-rata Nilai</div></div>` +
+    `<div class="kpi"><div class="kpi-val">#${d.rank}</div><div class="kpi-lab">Peringkat dari ${dosen.length}</div></div>` +
+    `<div class="kpi"><div class="kpi-val">${d.n}</div><div class="kpi-lab">Penilaian</div></div>` +
+    `<div class="kpi"><div class="kpi-val">${Math.round(d.dist[4] / d.n * 100)}%</div><div class="kpi-lab">Memberi nilai 5</div></div></div>` +
+    `<div class="grid-2 gap">` +
+    `<div><h3 style="margin:0 0 8px">Sebaran Nilai</h3>${[5, 4, 3, 2, 1].map((s) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:.85rem"><b style="width:14px">${s}</b>` +
+      `<div class="pst-bar" style="width:100%;flex:1"><span style="width:${(d.dist[s - 1] / mx * 100).toFixed(0)}%"></span></div><span style="width:34px;text-align:right">${d.dist[s - 1]}</span></div>`).join("")}` +
+    `<h3 style="margin:14px 0 8px">Per Metode</h3><div class="table-wrap"><table><thead><tr><th>Metode</th><th>Penilaian</th><th>Rata-rata</th></tr></thead><tbody>${perMetode}</tbody></table></div></div>` +
+    `<div><h3 style="margin:0 0 8px">Komentar Peserta (menyebut ${pstEsc(nice)})</h3>` +
+    (mine.length ? mine.slice(0, 8).map((c) => `<div class="dsn-quote">${pstEsc(c.txt)}<small>${pstEsc(c.prog)} · ${pstEsc(c.kelas)}</small></div>`).join("") +
+      (mine.length > 8 ? `<div class="nil-muted" style="font-size:.78rem">+${mine.length - 8} komentar lain</div>` : "")
+      : '<div class="nil-muted">Belum ada komentar yang menyebut nama dosen ini.</div>') + `</div></div>`;
+  $("dsn-close").addEventListener("click", () => { DSN_SEL = ""; renderDosenView(); });
+}
+
+async function openDosenView() {
+  if (DSN_RAW === null) {
+    if ($("dsn-msg")) { $("dsn-msg").textContent = "⏳ Memuat data dosen…"; $("dsn-msg").style.color = ""; }
+    await loadDosen();
+  }
+  renderDosenView();
+}
+function initDosenView() {
+  DSN_FILTERS.map(([id]) => id).concat(["df-minresp"]).forEach((id) => { if ($(id)) $(id).addEventListener("change", renderDosenView); });
+  if ($("dsn-search")) $("dsn-search").addEventListener("input", renderDosenView);
+  if ($("dsn-refresh")) $("dsn-refresh").addEventListener("click", async () => {
+    const b = $("dsn-refresh"); const t = b.textContent; b.textContent = "⏳ Memuat..."; await loadDosen(); renderDosenView(); b.textContent = t;
+  });
 }
 
 window.addEventListener("DOMContentLoaded", init);
