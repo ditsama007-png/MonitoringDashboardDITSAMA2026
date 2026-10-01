@@ -2550,6 +2550,16 @@ function pstParse() {
       });
     });
   });
+  // nama sekolah yang hanya beda huruf besar/kecil, spasi, atau tanda baca -> pakai ejaan yang paling sering muncul
+  const sekGroups = {};
+  people.forEach((p) => {
+    if (!p.sek) return;
+    const k = p.sek.toLowerCase().replace(/[^a-z0-9]/g, "");
+    (sekGroups[k] = sekGroups[k] || {})[p.sek] = ((sekGroups[k] || {})[p.sek] || 0) + 1;
+  });
+  const sekBest = {};
+  Object.keys(sekGroups).forEach((k) => { sekBest[k] = Object.entries(sekGroups[k]).sort((a, b) => b[1] - a[1])[0][0]; });
+  people.forEach((p) => { if (p.sek) p.sek = sekBest[p.sek.toLowerCase().replace(/[^a-z0-9]/g, "")]; });
   const examKeys = Object.keys(examSet).sort();
   return { people, examKeys };
 }
@@ -2630,6 +2640,7 @@ function renderPesertaView() {
   $("pk-dinilai").textContent = rows.length ? nilaiUj.length + " / " + rows.length : "–";
 
   pstCharts(rows, examKeys, uj, ujLabel);
+  pstRenderSekolah(rows, uj, ujLabel);
   pstRenderRanking(rows, examKeys, uj, ujLabel);
   pstRenderList(rows, examKeys);
 }
@@ -2688,6 +2699,53 @@ function pstCharts(rows, examKeys, uj, ujLabel) {
   };
   chartPstProv = topBar($("pst-chart-prov"), chartPstProv, "prov");
   chartPstFak = topBar($("pst-chart-fak"), chartPstFak, "fak");
+}
+
+let PST_SEK_ALL = false;
+function pstRenderSekolah(rows, uj, ujLabel) {
+  const tbl = $("pst-sek"); if (!tbl) return;
+  const q = ($("pst-sek-search") ? $("pst-sek-search").value : "").trim().toLowerCase();
+  const g = {};
+  rows.forEach((p) => {
+    const k = p.sek || "(tidak diisi)";
+    const o = g[k] = g[k] || { n: 0, prov: {}, nilai: [], per: {} };
+    o.n++;
+    // frekuensi: berapa periode berbeda sekolah ini ikut (per program + periode)
+    const perKey = (p.prog || "-") + " · Periode " + (p.periode || "-");
+    o.per[perKey] = (o.per[perKey] || 0) + 1;
+    if (p.prov) o.prov[p.prov] = (o.prov[p.prov] || 0) + 1;
+    const e = p.n[uj]; if (e && e.v !== null) o.nilai.push(e.v);
+  });
+  const total = rows.length || 1;
+  let list = Object.entries(g).map(([nama, o]) => ({
+    nama, n: o.n,
+    prov: Object.entries(o.prov).sort((a, b) => b[1] - a[1]).map((x) => x[0])[0] || "–",
+    avg: o.nilai.length ? o.nilai.reduce((a, b) => a + b, 0) / o.nilai.length : null, dinilai: o.nilai.length,
+    frek: Object.keys(o.per).length,
+    perList: Object.entries(o.per).sort((a, b) => a[0].localeCompare(b[0], "id", { numeric: true })),
+  })).sort((a, b) => b.n - a.n || a.nama.localeCompare(b.nama));
+  let prev = null, prevRank = 0;
+  list.forEach((x, i) => { x.rank = (prev !== null && x.n === prev) ? prevRank : i + 1; prev = x.n; prevRank = x.rank; });
+  const nSek = list.filter((x) => x.nama !== "(tidak diisi)").length;
+  if (q) list = list.filter((x) => x.nama.toLowerCase().includes(q) || x.prov.toLowerCase().includes(q));
+  if ($("pst-sek-sub")) $("pst-sek-sub").textContent = `${nSek} sekolah/instansi · ${rows.length} peserta` + (q ? ` · ${list.length} cocok dengan "${q}"` : "");
+  const show = (PST_SEK_ALL || q) ? list : list.slice(0, 10);
+  tbl.querySelector("thead").innerHTML = "<tr><th>No</th><th>Nama Sekolah / Instansi</th><th>Provinsi</th><th>Jumlah Peserta</th>" +
+    "<th>% dari Total</th><th title=\"Berapa periode berbeda sekolah ini mengirim peserta\">Frekuensi Ikut</th><th>Rata-rata Nilai " + pstEsc(ujLabel) + "</th></tr>";
+  tbl.querySelector("tbody").innerHTML = show.map((x) => {
+    const pc = x.n / total * 100;
+    return `<tr><td>${x.rank}</td><td><b>${pstEsc(x.nama)}</b></td><td>${pstEsc(x.prov)}</td>` +
+      `<td class="pst-val">${x.n.toLocaleString("id-ID")}</td>` +
+      `<td><div class="pst-bar"><span style="width:${Math.max(2, pc).toFixed(1)}%"></span></div>${pc.toFixed(1)}%</td>` +
+      `<td title="${pstEsc(x.perList.map(([k, n]) => k + ": " + n + " peserta").join("\n"))}"><b>${x.frek}×</b> ` +
+        `<span class="nil-muted">${pstEsc(x.perList.map(([k]) => k.replace(" · Periode ", " P")).slice(0, 4).join(", ") + (x.perList.length > 4 ? ", …" : ""))}</span></td>` +
+      `<td class="${x.avg === null ? "nil-muted" : ""}">${x.avg === null ? "–" : x.avg.toFixed(1) + ` <span class="nil-muted">(${x.dinilai} dinilai)</span>`}</td></tr>`;
+  }).join("") || '<tr><td colspan="7" class="nil-muted">Tidak ada data sekolah.</td></tr>';
+  const more = $("pst-sek-more");
+  if (more) {
+    more.hidden = !!q || list.length <= 10;
+    more.textContent = PST_SEK_ALL ? "Tampilkan 10 teratas saja" : `Tampilkan semua (${list.length} sekolah)`;
+  }
 }
 
 function pstRenderRanking(rows, examKeys, uj, ujLabel) {
@@ -2765,6 +2823,8 @@ function initPesertaView() {
   if ($("pst-rank-more")) $("pst-rank-more").addEventListener("click", () => { PST_RANK_ALL = !PST_RANK_ALL; renderPesertaView(); });
   if ($("pst-list-more")) $("pst-list-more").addEventListener("click", () => { PST_LIST_N += 50; renderPesertaView(); });
   if ($("pst-search")) $("pst-search").addEventListener("input", () => { PST_LIST_N = 50; renderPesertaView(); });
+  if ($("pst-sek-search")) $("pst-sek-search").addEventListener("input", renderPesertaView);
+  if ($("pst-sek-more")) $("pst-sek-more").addEventListener("click", () => { PST_SEK_ALL = !PST_SEK_ALL; renderPesertaView(); });
 }
 
 window.addEventListener("DOMContentLoaded", init);
