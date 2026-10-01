@@ -410,3 +410,5 @@ tr.rank-top td{background:#F4F8FD}
 .idx-chip.low{background:#FDE8D4;color:#8A4B0F}
 .nil-muted{color:#9AA3B2}
 .pst-val{font-weight:800;color:var(--navy)}
+.pst-bar{display:inline-block;vertical-align:middle;width:90px;height:8px;background:#EAF1FB;border-radius:5px;margin-right:8px;overflow:hidden}
+.pst-bar span{display:block;height:100%;background:var(--blue);border-radius:5px}
