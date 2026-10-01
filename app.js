@@ -2468,7 +2468,7 @@ const PST_PROV_BAKU = ["Aceh","Sumatera Utara","Sumatera Barat","Riau","Kepulaua
   "Jawa Timur","Bali","Nusa Tenggara Barat","Nusa Tenggara Timur","Kalimantan Barat","Kalimantan Tengah","Kalimantan Selatan",
   "Kalimantan Timur","Kalimantan Utara","Sulawesi Utara","Gorontalo","Sulawesi Tengah","Sulawesi Barat","Sulawesi Selatan",
   "Sulawesi Tenggara","Maluku","Maluku Utara","Papua","Papua Barat","Papua Barat Daya","Papua Tengah","Papua Pegunungan",
-  "Papua Selatan","Luar Negeri"];
+  "Papua Selatan"];
 function pstProvKey(s) {
   return String(s || "").toLowerCase().replace(/\d+/g, "").trim()
     .replace(/^(provinsi|prov\.?)\s*/, "").replace(/sumatra/g, "sumatera").replace(/kep\./g, "kepulauan ")
@@ -2484,7 +2484,10 @@ const PST_PROV_MAP = (() => {
     jateng: "Jawa Tengah", centraljava: "Jawa Tengah", jatim: "Jawa Timur", eastjava: "Jawa Timur", jawatimue: "Jawa Timur",
     tangerang: "Banten", tangerangselatan: "Banten", diy: "DI Yogyakarta", yogyakarta: "DI Yogyakarta", jogja: "DI Yogyakarta",
     daerahistimewayogyakarta: "DI Yogyakarta", bangkabelitung: "Kepulauan Bangka Belitung", babel: "Kepulauan Bangka Belitung",
-    malaysia: "Luar Negeri", madinah: "Luar Negeri",
+    // luar negeri -> nama negara
+    malaysia: "Malaysia", singapura: "Singapura", singapore: "Singapura", brunei: "Brunei Darussalam",
+    madinah: "Arab Saudi", mekkah: "Arab Saudi", makkah: "Arab Saudi", saudiarabia: "Arab Saudi", arabsaudi: "Arab Saudi",
+    jepang: "Jepang", japan: "Jepang", tiongkok: "Tiongkok", china: "Tiongkok", australia: "Australia",
   });
   return m;
 })();
