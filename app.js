@@ -2424,16 +2424,26 @@ async function loadPeserta() {
   PST_ERR = "";
   if (!API_URL) { PST_RAW = PST_RAW || []; return; }
   if (!SESSION || !SESSION.token) { PST_ERR = "Silakan login dulu."; return; }
+  let res, txt = "";
   try {
-    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+    res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action: "read_peserta", token: SESSION.token }) });
-    const out = await res.json();
-    if (out.ok) PST_RAW = out.tabs || [];
-    else PST_ERR = out.error || "Gagal memuat data peserta.";
+    txt = await res.text();
   } catch (e) {
     console.error("read_peserta gagal:", e);
-    PST_ERR = "Gagal terhubung ke server. Pastikan Code.gs terbaru (ada read_peserta) sudah di-deploy.";
+    PST_ERR = "Tidak bisa menghubungi server (" + (e && e.message ? e.message : e) + "). Cek koneksi internet / API_URL di config.js.";
+    return;
   }
+  let out = null;
+  try { out = JSON.parse(txt); } catch (e) {
+    // server membalas halaman HTML (biasanya error Apps Script) -> tampilkan ringkasannya
+    const plain = txt.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    console.error("read_peserta: balasan bukan JSON", res && res.status, txt.slice(0, 1000));
+    PST_ERR = "Server membalas error (HTTP " + (res ? res.status : "?") + "): " + (plain.slice(0, 300) || "(kosong)");
+    return;
+  }
+  if (out.ok) PST_RAW = out.tabs || [];
+  else PST_ERR = out.error || "Gagal memuat data peserta.";
 }
 
 // ---- baca header -> index kolom + daftar ujian ----
