@@ -2373,7 +2373,7 @@ async function init() {
   initCapaian();
   $("btn-simpan").addEventListener("click", simpan);
   $("in-program").addEventListener("change", () => renderInput($("in-program").value));
-  $("btn-refresh").addEventListener("click", async () => { await loadFlex(); await loadData(); await loadCapaian(); rebuildFilters(); render(); });
+  $("btn-refresh").addEventListener("click", async () => { await loadFlex(); await loadData(); CAP_RAW = null; await loadCapaian(); rebuildFilters(); render(); });
   if ($("cal-prev")) $("cal-prev").addEventListener("click", () => calShift(-1));
   if ($("cal-next")) $("cal-next").addEventListener("click", () => calShift(1));
   if ($("btn-add-col")) $("btn-add-col").addEventListener("click", () => addExtraCol());
@@ -3132,7 +3132,10 @@ async function loadCapaian() {
     if (out.ok) CAP_RAW = out.tabs || [];
     else CAP_ERR = out.error === "aksi tidak dikenal" ? "Code.gs di server belum versi terbaru (Deploy → New version)." : (out.error || "Gagal memuat capaian.");
   } catch (e) { CAP_ERR = "Gagal terhubung ke server."; }
-  finally { CAP_LOADING = false; }
+  finally {
+    CAP_LOADING = false;
+    if (CAP_RAW === null) CAP_RAW = [];   // gagal -> jangan dicoba ulang terus (dicoba lagi lewat tombol Refresh)
+  }
 }
 
 // "EduQuest" -> INSPIRASI_EDQ, "SIAP" -> SIAP, dst.
@@ -3178,7 +3181,7 @@ function capParse() {
 
 function renderCapaian() {
   const card = $("cap-card"); if (!card) return;
-  if (CAP_RAW === null && !CAP_LOADING && SESSION && SESSION.token) { loadCapaian().then(() => { rebuildFilters(); renderCapaian(); }); }
+  if (CAP_RAW === null && !CAP_LOADING && SESSION && SESSION.token) { loadCapaian().then(() => { rebuildFilters(); renderCapaian(); }); return; }
   const all = capParse();
   const fp = filterProgramToKey(selValue($("flt-program"))), fy = selValue($("flt-tahun"));
   let rows = all.filter((x) => (fp === "Semua" || x.prog === fp) && (fy === "Semua" || !x.tahun || x.tahun === fy));
