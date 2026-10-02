@@ -2252,6 +2252,7 @@ function demoAuth(nama, jab, email, pass, code, msg) {
 function loginSuccess(sess) {
   SESSION = sess;
   PST_RAW = null; DSN_RAW = null; CAP_RAW = null;
+  loadCapaian().then(() => { rebuildFilters(); renderCapaian(); });   // mulai langsung, paralel dgn data lain
   $("auth-gate").style.display = "none";
   applyAccess();
   setActiveNav(document.querySelector('.nav-item[data-view="dashboard"]'));
@@ -3124,15 +3125,18 @@ async function loadCapaian() {
   if (!API_URL) { CAP_RAW = CAP_RAW || []; return; }
   if (!SESSION || !SESSION.token) return;
   CAP_LOADING = true;
+  const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => ctl.abort(), 30000) : null;   // maks 30 detik
   try {
     const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "read_capaian", token: SESSION.token }) });
+      body: JSON.stringify({ action: "read_capaian", token: SESSION.token }), signal: ctl ? ctl.signal : undefined });
     const txt = await res.text();
     let out; try { out = JSON.parse(txt); } catch (e) { CAP_ERR = "Server membalas error (HTTP " + res.status + ")."; return; }
     if (out.ok) CAP_RAW = out.tabs || [];
     else CAP_ERR = out.error === "aksi tidak dikenal" ? "Code.gs di server belum versi terbaru (Deploy → New version)." : (out.error || "Gagal memuat capaian.");
-  } catch (e) { CAP_ERR = "Gagal terhubung ke server."; }
+  } catch (e) { CAP_ERR = (e && e.name === "AbortError") ? "Server terlalu lama membalas (>30 detik). Klik Refresh Data untuk mencoba lagi." : "Gagal terhubung ke server."; }
   finally {
+    if (timer) clearTimeout(timer);
     CAP_LOADING = false;
     if (CAP_RAW === null) CAP_RAW = [];   // gagal -> jangan dicoba ulang terus (dicoba lagi lewat tombol Refresh)
   }
@@ -3195,7 +3199,7 @@ function renderCapaian() {
   const sub = $("cap-sub");
   if (sub) {
     if (CAP_ERR) { sub.textContent = "⚠️ " + CAP_ERR; sub.style.color = "var(--red)"; }
-    else if (CAP_RAW === null) { sub.textContent = "⏳ Memuat capaian…"; sub.style.color = ""; }
+    else if (CAP_RAW === null) { sub.textContent = "⏳ Memuat capaian dari Google Sheets…"; sub.style.color = ""; }
     else if (!CAP_RAW.length) { sub.innerHTML = "Belum ada data. Buat tab <b>Capaian_Peserta</b> di spreadsheet utama."; sub.style.color = ""; }
     else { sub.textContent = `(dari sheet Capaian_Peserta · ikut filter Program & Tahun di Control) · ${rows.length} capaian · ${rows.reduce((a, x) => a + x.names.length, 0)} peserta`; sub.style.color = ""; }
   }
@@ -3214,7 +3218,7 @@ function renderCapaian() {
     `<td><span class="medal ${x.rank.cls}">${pstEsc(x.rank.label)}</span></td>` +
     `<td>${x.names.length > 1 ? `<ol class="cap-names">${x.names.map((n) => `<li>${pstEsc(n)}</li>`).join("")}</ol>` : pstEsc(x.names[0])}</td>` +
     `<td>${pstEsc(x.jenis)}${x.names.length > 1 ? ` <span class="nil-muted">(${x.names.length} orang)</span>` : ""}</td></tr>`
-  ).join("") || `<tr><td colspan="6" class="nil-muted">${CAP_RAW && CAP_RAW.length ? "Tidak ada capaian untuk filter ini." : "Belum ada data capaian."}</td></tr>`;
+  ).join("") || `<tr><td colspan="6" class="nil-muted">${CAP_RAW === null ? "⏳ Sedang memuat…" : (CAP_RAW.length ? "Tidak ada capaian untuk filter ini." : "Belum ada data capaian.")}</td></tr>`;
 }
 function initCapaian() {
   if ($("cap-search")) $("cap-search").addEventListener("input", renderCapaian);
