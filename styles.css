@@ -438,3 +438,20 @@ tr.rank-top td{background:#F4F8FD}
 .dsn-prof .tags span{background:rgba(255,255,255,.16);padding:2px 9px;border-radius:10px;font-size:.75rem;font-weight:700}
 .dsn-quote{background:#F6F8FC;border-left:3px solid var(--blue);padding:8px 10px;border-radius:6px;font-size:.84rem;margin-bottom:6px}
 .dsn-quote small{display:block;color:var(--muted);margin-top:3px}
+
+
+/* ---------------- Capaian Peserta ---------------- */
+.cap-chips{display:flex;flex-wrap:wrap;gap:8px;margin:.2rem 0 .7rem}
+.cap-chip{display:flex;align-items:center;gap:8px;background:#F6F8FC;border:1px solid var(--line);border-radius:12px;padding:6px 12px;font-size:.8rem}
+.cap-chip b{font-size:1.1rem;color:var(--navy)}
+.medal{display:inline-flex;align-items:center;gap:5px;font-size:.75rem;font-weight:800;padding:3px 10px;border-radius:12px;white-space:nowrap}
+.medal::before{content:"";width:10px;height:10px;border-radius:50%;background:currentColor;opacity:.85}
+.medal.emas{background:#FFF3C4;color:#8A6400}
+.medal.perak{background:#ECEFF3;color:#505A68}
+.medal.perunggu{background:#F6E1CF;color:#8A4B1C}
+.medal.hm{background:#DBE8FB;color:var(--navy)}
+.medal.juara{background:var(--navy);color:#fff}
+.medal.lain{background:#EAF1FB;color:var(--navy)}
+.cap-names{margin:0;padding-left:18px;white-space:normal;line-height:1.5}
+.cap-names li{white-space:normal}
+#cap-table td{vertical-align:top}
