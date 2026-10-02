@@ -151,6 +151,7 @@ function render() {
   renderDashGantt();
   renderPeserta();
   renderMitra();
+  renderCapaian();
 }
 
 // ---- konversi baris DataMasuk -> bentuk standar yang dipakai render lama ----
@@ -1167,7 +1168,8 @@ function rebuildFilters() {
   const all = ((FLEX_CACHE && FLEX_CACHE.rows) || []).map(flexToStd);
   // Tahun
   const yearOf = (v) => { const d = parseTgl(v); return d ? String(d.getFullYear()) : ""; };
-  const tahun = [...new Set(all.map((r) => yearOf(r.tanggal)).filter(Boolean))].sort();
+  const tahun = [...new Set(all.map((r) => yearOf(r.tanggal)).concat(
+    (typeof capParse === "function" ? capParse().map((x) => x.tahun) : [])).filter(Boolean))].sort();
   fillSelect($("flt-tahun"), ["Semua", ...tahun], selValue($("flt-tahun")));
   // Bulan (urut kronologis pakai tanggal asli)
   const mm = {}; all.forEach((r) => { const d = parseTgl(r.tanggal); if (d) mm[monthLabel(r.tanggal)] = d.getFullYear() * 12 + d.getMonth(); });
@@ -2249,7 +2251,7 @@ function demoAuth(nama, jab, email, pass, code, msg) {
 
 function loginSuccess(sess) {
   SESSION = sess;
-  PST_RAW = null; DSN_RAW = null;
+  PST_RAW = null; DSN_RAW = null; CAP_RAW = null;
   $("auth-gate").style.display = "none";
   applyAccess();
   setActiveNav(document.querySelector('.nav-item[data-view="dashboard"]'));
@@ -2287,7 +2289,7 @@ function unlockDashboard() {
 
 function logout() {
   SESSION = null;
-  PST_RAW = null; DSN_RAW = null;
+  PST_RAW = null; DSN_RAW = null; CAP_RAW = null;
   try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
   $("profile-modal").hidden = true;
   $("a-pass").value = "";
@@ -2368,9 +2370,10 @@ async function init() {
 
   initPesertaView();
   initDosenView();
+  initCapaian();
   $("btn-simpan").addEventListener("click", simpan);
   $("in-program").addEventListener("change", () => renderInput($("in-program").value));
-  $("btn-refresh").addEventListener("click", async () => { await loadFlex(); await loadData(); rebuildFilters(); render(); });
+  $("btn-refresh").addEventListener("click", async () => { await loadFlex(); await loadData(); await loadCapaian(); rebuildFilters(); render(); });
   if ($("cal-prev")) $("cal-prev").addEventListener("click", () => calShift(-1));
   if ($("cal-next")) $("cal-next").addEventListener("click", () => calShift(1));
   if ($("btn-add-col")) $("btn-add-col").addEventListener("click", () => addExtraCol());
@@ -3107,6 +3110,111 @@ function initDosenView() {
   if ($("dsn-refresh")) $("dsn-refresh").addEventListener("click", async () => {
     const b = $("dsn-refresh"); const t = b.textContent; b.textContent = "⏳ Memuat..."; await loadDosen(); renderDosenView(); b.textContent = t;
   });
+}
+
+// ============================================================
+//  CAPAIAN PESERTA (pemenang / medali) — tab berawalan "Capaian" (mis. Capaian_Peserta)
+//  Kolom: PIC | Program | Periode | Tahun | Nama | Jenis (Perorangan/Kelompok) | Kategori | Peringkat
+//  Tampil di Program Portfolio, ikut filter Program & Tahun dashboard.
+// ============================================================
+let CAP_RAW = null, CAP_ERR = "", CAP_LOADING = false;
+
+async function loadCapaian() {
+  CAP_ERR = "";
+  if (!API_URL) { CAP_RAW = CAP_RAW || []; return; }
+  if (!SESSION || !SESSION.token) return;
+  CAP_LOADING = true;
+  try {
+    const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "read_capaian", token: SESSION.token }) });
+    const txt = await res.text();
+    let out; try { out = JSON.parse(txt); } catch (e) { CAP_ERR = "Server membalas error (HTTP " + res.status + ")."; return; }
+    if (out.ok) CAP_RAW = out.tabs || [];
+    else CAP_ERR = out.error === "aksi tidak dikenal" ? "Code.gs di server belum versi terbaru (Deploy → New version)." : (out.error || "Gagal memuat capaian.");
+  } catch (e) { CAP_ERR = "Gagal terhubung ke server."; }
+  finally { CAP_LOADING = false; }
+}
+
+// "EduQuest" -> INSPIRASI_EDQ, "SIAP" -> SIAP, dst.
+function capProgKey(p) {
+  const s = String(p || "").trim(); if (!s) return "";
+  const k = keyFromStored(s); if (programByKey(k)) return k;
+  const low = s.toLowerCase();
+  const hit = PROGRAMS.find((x) => x.label.toLowerCase().includes(low) || low.includes(x.key.toLowerCase()) || low.includes(x.label.toLowerCase()));
+  return hit ? hit.key : s;
+}
+// urutan & gaya peringkat
+function capRank(peringkat) {
+  const s = String(peringkat || "").trim(), l = s.toLowerCase();
+  if (!s) return { ord: 5, label: "Pemenang", cls: "lain" };
+  if (/emas|gold/.test(l)) return { ord: 1, label: "Medali Emas", cls: "emas" };
+  if (/perak|silver/.test(l)) return { ord: 2, label: "Medali Perak", cls: "perak" };
+  if (/perunggu|bronze/.test(l)) return { ord: 3, label: "Medali Perunggu", cls: "perunggu" };
+  if (/honou?rable|^hm$/.test(l)) return { ord: 4, label: "Honorable Mention", cls: "hm" };
+  const m = /^(juara\s*)?(\d+)$/.exec(l);
+  if (m) return { ord: +m[2], label: "Juara " + m[2], cls: +m[2] <= 3 ? "juara" : "lain" };
+  return { ord: 5, label: s, cls: "lain" };
+}
+
+function capParse() {
+  const out = [];
+  (CAP_RAW || []).forEach((t) => {
+    const H = (t.header || []).map((h) => String(h || "").trim());
+    const f = (re) => H.findIndex((h) => re.test(h));
+    const c = { prog: f(/^program$/i), per: f(/^periode$/i), th: f(/^tahun$/i), nama: f(/^nama/i), jenis: f(/^jenis/i), kat: f(/^kategori/i), rk: f(/^peringkat|^capaian|^juara$/i) };
+    const g = (r, i) => (i >= 0 && r[i] !== null && r[i] !== undefined) ? String(r[i]).trim() : "";
+    (t.rows || []).forEach((r) => {
+      const nama = g(r, c.nama); if (!nama) return;
+      const names = nama.split(/\s*;\s*|\n+/).map((x) => x.trim()).filter(Boolean);
+      const jRaw = g(r, c.jenis).toLowerCase();
+      const jenis = /kelompok|tim|team|group/.test(jRaw) ? "Kelompok" : (/individu|perorangan|personal/.test(jRaw) ? "Individu" : (names.length > 1 ? "Kelompok" : "Individu"));
+      const key = capProgKey(g(r, c.prog));
+      out.push({ prog: key, progLabel: labelOf(key), periode: g(r, c.per), tahun: g(r, c.th).replace(/\.0+$/, ""),
+        names, jenis, kat: g(r, c.kat), rank: capRank(g(r, c.rk)) });
+    });
+  });
+  return out;
+}
+
+function renderCapaian() {
+  const card = $("cap-card"); if (!card) return;
+  if (CAP_RAW === null && !CAP_LOADING && SESSION && SESSION.token) { loadCapaian().then(() => { rebuildFilters(); renderCapaian(); }); }
+  const all = capParse();
+  const fp = filterProgramToKey(selValue($("flt-program"))), fy = selValue($("flt-tahun"));
+  let rows = all.filter((x) => (fp === "Semua" || x.prog === fp) && (fy === "Semua" || !x.tahun || x.tahun === fy));
+  const q = ($("cap-search") ? $("cap-search").value : "").trim().toLowerCase();
+  rows = rows.filter((x) => !q || x.names.join(" ").toLowerCase().includes(q) || x.kat.toLowerCase().includes(q));
+  const best = {};   // peringkat terbaik per (program, kategori) -> kategori juara utama tampil lebih dulu
+  rows.forEach((x) => { const k = x.prog + "|" + x.kat; best[k] = Math.min(best[k] || 99, x.rank.ord); });
+  rows.sort((a, b) => a.progLabel.localeCompare(b.progLabel) || best[a.prog + "|" + a.kat] - best[b.prog + "|" + b.kat] ||
+    a.kat.localeCompare(b.kat) || a.rank.ord - b.rank.ord);
+
+  const sub = $("cap-sub");
+  if (sub) {
+    if (CAP_ERR) { sub.textContent = "⚠️ " + CAP_ERR; sub.style.color = "var(--red)"; }
+    else if (CAP_RAW === null) { sub.textContent = "⏳ Memuat capaian…"; sub.style.color = ""; }
+    else if (!CAP_RAW.length) { sub.innerHTML = "Belum ada data. Buat tab <b>Capaian_Peserta</b> di spreadsheet utama."; sub.style.color = ""; }
+    else { sub.textContent = `(dari sheet Capaian_Peserta · ikut filter Program & Tahun di Control) · ${rows.length} capaian · ${rows.reduce((a, x) => a + x.names.length, 0)} peserta`; sub.style.color = ""; }
+  }
+  // ringkasan
+  const cnt = (fn) => rows.filter(fn).length;
+  const chips = [
+    ["Medali Emas", cnt((x) => x.rank.cls === "emas"), "emas"], ["Medali Perak", cnt((x) => x.rank.cls === "perak"), "perak"],
+    ["Medali Perunggu", cnt((x) => x.rank.cls === "perunggu"), "perunggu"], ["Honorable Mention", cnt((x) => x.rank.cls === "hm"), "hm"],
+    ["Juara 1–3", cnt((x) => x.rank.cls === "juara"), "juara"], ["Penghargaan lain", cnt((x) => x.rank.cls === "lain"), "lain"],
+  ].filter((c) => c[1] > 0);
+  $("cap-chips").innerHTML = chips.map(([l, n, cls]) => `<div class="cap-chip"><span class="medal ${cls}">${l}</span><b>${n}</b></div>`).join("");
+  const tbl = $("cap-table");
+  tbl.querySelector("thead").innerHTML = "<tr><th>No</th><th>Program</th><th>Kategori</th><th>Peringkat</th><th>Nama</th><th>Jenis</th></tr>";
+  tbl.querySelector("tbody").innerHTML = rows.map((x, i) =>
+    `<tr><td>${i + 1}</td><td>${pstEsc(x.progLabel)}</td><td><b>${pstEsc(x.kat || "–")}</b></td>` +
+    `<td><span class="medal ${x.rank.cls}">${pstEsc(x.rank.label)}</span></td>` +
+    `<td>${x.names.length > 1 ? `<ol class="cap-names">${x.names.map((n) => `<li>${pstEsc(n)}</li>`).join("")}</ol>` : pstEsc(x.names[0])}</td>` +
+    `<td>${pstEsc(x.jenis)}${x.names.length > 1 ? ` <span class="nil-muted">(${x.names.length} orang)</span>` : ""}</td></tr>`
+  ).join("") || `<tr><td colspan="6" class="nil-muted">${CAP_RAW && CAP_RAW.length ? "Tidak ada capaian untuk filter ini." : "Belum ada data capaian."}</td></tr>`;
+}
+function initCapaian() {
+  if ($("cap-search")) $("cap-search").addEventListener("input", renderCapaian);
 }
 
 window.addEventListener("DOMContentLoaded", init);
