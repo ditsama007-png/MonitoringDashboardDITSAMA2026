@@ -2362,9 +2362,12 @@ async function init() {
 
   // --- muat data (DataMasuk utama untuk dashboard) ---
   try {
-    await loadFlex();          // data utama dari DataMasuk
-    await loadFin();           // data keuangan dari sheet Financial
-    await loadData();          // data lama (_2026) untuk cadangan/kalender bila ada
+    // semua permintaan ke Google dijalankan BERSAMAAN (bukan antre satu per satu)
+    await Promise.all([
+      loadFlex(),              // data utama dari DataMasuk
+      loadFin(),               // data keuangan dari sheet Financial
+      loadData(),              // data lama (_2026) untuk cadangan/kalender bila ada
+    ]);
     rebuildFilters();
     render();
   } catch (e) { console.error("Gagal muat data:", e); }
@@ -2374,7 +2377,12 @@ async function init() {
   initCapaian();
   $("btn-simpan").addEventListener("click", simpan);
   $("in-program").addEventListener("change", () => renderInput($("in-program").value));
-  $("btn-refresh").addEventListener("click", async () => { await loadFlex(); await loadData(); CAP_RAW = null; await loadCapaian(); rebuildFilters(); render(); });
+  $("btn-refresh").addEventListener("click", async () => {
+    const b = $("btn-refresh"), t = b.innerHTML; b.innerHTML = "⏳ Memuat…"; b.disabled = true;
+    CAP_RAW = null;
+    await Promise.all([loadFlex(), loadData(), loadCapaian()]);
+    rebuildFilters(); render(); b.innerHTML = t; b.disabled = false;
+  });
   if ($("cal-prev")) $("cal-prev").addEventListener("click", () => calShift(-1));
   if ($("cal-next")) $("cal-next").addEventListener("click", () => calShift(1));
   if ($("btn-add-col")) $("btn-add-col").addEventListener("click", () => addExtraCol());
@@ -2396,7 +2404,6 @@ async function init() {
   if ($("mitra-toggle")) $("mitra-toggle").addEventListener("click", () => {
     const t = $("mitra-list"); if (t) t.hidden = !t.hidden;
   });
-  loadFlex();
   ["flt-program", "flt-tahun", "flt-bulan", "flt-fase", "flt-kegiatan", "flt-level"].forEach((id) =>
     $(id).addEventListener("change", () => { if (id === "flt-program") rebuildFilters(); render(); }));
 }
