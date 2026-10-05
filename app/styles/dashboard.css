@@ -25,7 +25,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .rail-nav{margin-top:1.3rem;display:flex;flex-direction:column;gap:.35rem;flex:1}
 .nav-label{font-size:.7rem;color:#B9CBE6;margin:.9rem .2rem .1rem;text-transform:uppercase;letter-spacing:.03em}
 .nav-item{background:transparent;border:none;color:#EAF1FB;text-align:left;font-size:.95rem;
-  font-weight:700;padding:.55rem .7rem;border-radius:22px;cursor:pointer}
+  font-weight:700;padding:.55rem .7rem;border-radius:22px;cursor:pointer;text-decoration:none}
 .nav-item:hover{background:rgba(255,255,255,.08)}
 .nav-item.active{background:#dbe8fb;color:var(--navy)}
 .rail-foot{display:flex;align-items:center;gap:.5rem;font-weight:700;margin-top:1rem;

@@ -4,10 +4,10 @@
 
 // URL Web App dari Google Apps Script (lihat README langkah setup).
 // Selama masih kosong (""), website jalan dengan DATA CONTOH.
-const API_URL = "https://script.google.com/macros/s/AKfycbylTdZBgYuWL9roaIEF-9A-KIdQUf8ha2fVStexxonoucojaR-Lgu_2GTRAPrbn8v3Rqg/exec";
+export const API_URL = "https://script.google.com/macros/s/AKfycbylTdZBgYuWL9roaIEF-9A-KIdQUf8ha2fVStexxonoucojaR-Lgu_2GTRAPrbn8v3Rqg/exec";
 
 // Daftar program -> nama sheet di Google Sheets (harus sama persis)
-const PROGRAMS = [
+export const PROGRAMS = [
   { key: "SIAP",          label: "SIAP ITB",           sheet: "SIAP_2026" },
   { key: "INSPIRASI_EDQ", label: "INSPIRASI EduQuest", sheet: "INSPIRASI_Edq2026" },
   { key: "INSPIRASI_SCD", label: "INSPIRASI SCD",      sheet: "INSPIRASI_Scd2026" },
@@ -20,7 +20,7 @@ const PROGRAMS = [
 ];
 
 // Daftar program KHUSUS menu Financial (boleh beda dari program monitoring)
-const FIN_PROGRAMS = [
+export const FIN_PROGRAMS = [
   { key: "SIAP",          label: "SIAP ITB" },
   { key: "INSPIRASI_EDQ", label: "INSPIRASI EduQuest" },
   { key: "TORAJA",        label: "Toraja" },
@@ -32,13 +32,13 @@ const FIN_PROGRAMS = [
 ];
 
 // Pilihan dropdown pada form
-const OPSI_KEBERJALANAN = [
+export const OPSI_KEBERJALANAN = [
   "Sesuai Rencana", "Ada Kendala", "Tidak Sesuai Rencana", "Tidak Ada Penilaian",
 ];
-const OPSI_LEVEL_ISU = ["Tidak Ada", "High", "Medium", "Low"];
+export const OPSI_LEVEL_ISU = ["Tidak Ada", "High", "Medium", "Low"];
 
 // Pilihan Fase Kegiatan (dropdown di form input)
-const OPSI_FASE = [
+export const OPSI_FASE = [
   "Persiapan", "Proses",
   "Fase 1", "Fase 2", "Fase 3", "Fase 4", "Fase 5",
   "Fase 6", "Fase 7", "Fase 8", "Fase 9", "Fase 10",
@@ -46,14 +46,14 @@ const OPSI_FASE = [
 ];
 
 // Jabatan (role). Program yang dipegang dipilih terpisah saat sign up.
-const JABATAN = ["Admin", "Head Program", "Finance", "PIC"];
+export const JABATAN = ["Admin", "Head Program", "Finance", "PIC"];
 
 // Jabatan yang otomatis bisa MELIHAT semua program.
-// (Finance juga lihat semua, tapi hanya boleh isi menu Financial — diatur di app.js)
-const ALL_ACCESS_ROLES = ["Admin", "Head Program", "Finance"];
+// (Finance juga lihat semua, tapi hanya boleh isi menu Financial — diatur di app/lib/access.js)
+export const ALL_ACCESS_ROLES = ["Admin", "Head Program", "Finance"];
 
 // Jabatan yang HANYA boleh mengisi menu Financial (tak boleh Input Data program).
-const FINANCE_ONLY_ROLES = ["Finance"];
+export const FINANCE_ONLY_ROLES = ["Finance"];
 
 // Link dashboard/website SUGT (dibuka di tab baru dari menu "Program SUGT")
-const SUGT_URL = "https://internal.sugtitb.com";
+export const SUGT_URL = "https://internal.sugtitb.com";
