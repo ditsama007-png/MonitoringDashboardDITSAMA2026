@@ -1,0 +1,29 @@
+{
+  "name": "monitoring-dashboard-ditsama-2026",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "react-router dev",
+    "build": "react-router build && node scripts/spa-fallback.js",
+    "preview": "vite preview --outDir build/client",
+    "typecheck": "react-router typegen"
+  },
+  "dependencies": {
+    "@react-router/node": "^8.4.0",
+    "chart.js": "^4.5.1",
+    "chartjs-plugin-zoom": "^2.2.0",
+    "hammerjs": "^2.0.8",
+    "isbot": "^5.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router": "^8.4.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@react-router/dev": "^8.4.0",
+    "vite": "^8.3.2"
+  },
+  "engines": {
+    "node": ">=22.22"
+  }
+}

@@ -1,61 +1,58 @@
-# Dashboard DITSAMA 2026 — Versi Website (GitHub Pages)
+# Dashboard DITSAMA 2026 — React Router (framework mode)
 
-Website statis (HTML/CSS/JS) untuk monitoring program DITSAMA. Terdiri dari 3 layer
-yang bisa dimunculkan/disembunyikan: **Form Input**, **Filter**, dan **Dashboard**.
-Data disimpan ke **Google Sheets** melalui **Google Apps Script**, dengan
-**password per PIC** (tiap PIC hanya bisa mengisi program-nya sendiri).
+Website monitoring program DITSAMA, dibangun dengan **React Router v8 (framework mode, SPA)**
+dan **Zustand** untuk state bersama. Data disimpan ke **Google Sheets** melalui
+**Google Apps Script**, dengan login per pengguna (password dicek di server).
 
 ## Struktur file
 ```
-dashboard-web/
-├── index.html          # struktur halaman (3 layer)
-├── styles.css          # tampilan (biru ITB)
-├── app.js              # logika: toggle, dashboard, form, filter
-├── config.js           # URL Apps Script + daftar program  <-- diisi
-└── apps_script/
-    └── Code.gs         # backend: baca/tulis Sheets + cek password
+app/
+├── root.jsx                 # dokumen HTML + ErrorBoundary global
+├── routes.js                # daftar route
+├── config.js                # URL Apps Script + daftar program  <-- diisi
+├── routes/
+│   ├── home.jsx             # beranda (/)
+│   └── dashboard/
+│       ├── layout.jsx       # menu, gerbang login, Password Akses, panel Control
+│       ├── portfolio.jsx    # /dashboard           — Program Portfolio
+│       ├── financial.jsx    # /dashboard/financial
+│       ├── peserta.jsx      # /dashboard/peserta
+│       ├── dosen.jsx        # /dashboard/dosen
+│       ├── input.jsx        # /dashboard/input?program=SIAP&edit=<ID>
+│       └── program.jsx      # /dashboard/program/:programKey
+├── stores/                  # zustand: auth (sesi), data (Sheets), ui (filter/tab)
+├── lib/                     # helper murni: format, parser peserta/dosen/capaian, API
+├── components/              # Chart.js, Gantt, Kalender, gerbang login, dll.
+└── styles/                  # dashboard.css, home.css
+public/assets/dpb-logo.png
 ```
 
-## Cara pakai cepat (mode contoh)
-Buka `index.html` di browser. Tanpa setup apa pun, website tampil dengan **data contoh**
-supaya kamu bisa lihat tampilannya.
-
-## Setup agar tersambung ke Google Sheets (data asli)
-
-### 1. Pasang backend Apps Script
-1. Buka Google Sheets kamu → menu **Extensions → Apps Script**.
-2. Hapus kode default, tempel seluruh isi `apps_script/Code.gs`.
-3. Sesuaikan di bagian atas:
-   - `SPREADSHEET_ID` (sudah diisi ID sheet kamu).
-   - `PIC_ACCESS` → daftar PIC + password per program.
-4. Klik **Deploy → New deployment → (gear) Web app**.
-   - Execute as: **Me**
-   - Who has access: **Anyone**
-5. **Deploy**, izinkan akses, lalu **salin Web app URL**.
-
-### 2. Sambungkan website
-Buka `config.js`, isi `API_URL` dengan URL Web App tadi:
-```js
-const API_URL = "https://script.google.com/macros/s/XXXX/exec";
+## Menjalankan di komputer
+Butuh Node.js 22.22+.
+```bash
+npm install
+npm run dev
 ```
+Buka `http://localhost:5173/MonitoringDashboardDITSAMA2026/`.
 
-### 3. Publikaslikan di GitHub Pages
-1. Push folder ini ke repository GitHub.
-2. Repo → **Settings → Pages** → Source: **Deploy from a branch** → pilih `main` / root.
-3. Tunggu beberapa menit, website tersedia di `https://<user>.github.io/<repo>/`.
+## Setup Google Sheets (backend)
+1. Buka Google Sheets → **Extensions → Apps Script**, tempel `Code.gs`.
+2. Atur `SPREADSHEET_ID` dan daftar akses PIC di bagian atas `Code.gs`.
+3. **Deploy → New deployment → Web app** (Execute as: Me, Who has access: Anyone).
+4. Salin Web app URL ke `API_URL` di `app/config.js`.
+   Selama `API_URL` kosong (`""`), website jalan dalam **mode contoh** (akun disimpan di browser).
 
-## Password per PIC
-Diatur di `Code.gs` bagian `PIC_ACCESS`. Contoh:
-```js
-var PIC_ACCESS = {
-  "SIAP": { "budi": "siap123" },
-  "INSPIRASI_EDQ": { "sari": "edq123" }
-};
-```
-PIC memasukkan nama + password saat mengisi form. Validasi dilakukan di server
-(Apps Script), jadi password tidak terlihat di kode website.
+## Publikasi di GitHub Pages
+Workflow `.github/workflows/deploy.yml` otomatis build & deploy setiap push ke `main`.
+1. Repo → **Settings → Pages** → Source: **GitHub Actions**.
+2. Push ke `main`; website tersedia di `https://<user>.github.io/MonitoringDashboardDITSAMA2026/`.
+
+Jika nama repo berubah, sesuaikan `basename` di `react-router.config.js` **dan** `base`
+di `vite.config.js`.
+
+`npm run build` menghasilkan `build/client/` (termasuk `404.html` agar URL seperti
+`/dashboard/financial` tetap bisa dibuka langsung di GitHub Pages).
 
 ## Catatan keamanan
-- Cocok untuk tool internal. Password disimpan di Apps Script (server Google), bukan
-  di website, jadi jauh lebih aman daripada cek password di sisi browser.
-- Untuk keamanan lebih tinggi (mis. akun Google SSO), perlu pengembangan lanjutan.
+- Cocok untuk tool internal. Password diperiksa di Apps Script (server Google), bukan di website.
+- Sesi login tidak disimpan: pengguna wajib login setiap membuka website.
