@@ -1,68 +1,99 @@
-// Cache data dari backend, dipakai bersama oleh semua halaman dashboard.
-// Kunci = path + query. Setelah simpan/hapus, panggil invalidate("/activities", ...) agar halaman memuat ulang.
-import { useEffect, useRef } from "react";
+// Store data dari Google Sheets (via Apps Script). Dipakai bersama oleh semua halaman dashboard.
 import { create } from "zustand";
-import { api } from "../lib/api.js";
+import { apiPost, apiPostVerbose, HAS_API } from "../lib/api.js";
 import { useAuthStore } from "./auth.js";
+import { useUiStore } from "./ui.js";
 
-let seq = 0;
+const sessionToken = () => useAuthStore.getState().session?.token || null;
 
 export const useDataStore = create((set, get) => ({
-  entries: {},   // key -> { data, error, loading, stale, req }
+  // DataMasuk (data utama dashboard)
+  flex: { header: [], rows: [] },
+  flexLoaded: false,
+  // sheet Financial
+  fin: { rows: [], saldo: {} },
+  finLoaded: false,
+  // tab "Peserta*", "Dosen*", "Capaian*" (butuh login). raw === null -> belum dimuat
+  peserta: { raw: null, err: "" },
+  dosen: { raw: null, err: "" },
+  capaian: { raw: null, err: "", loading: false },
 
-  load: async (key, path, query) => {
-    const req = ++seq;
-    set((s) => ({ entries: { ...s.entries, [key]: { ...s.entries[key], loading: true, stale: false, req } } }));
-    let patch;
-    try {
-      patch = { data: await api(path, { query }), error: null };
-    } catch (e) {
-      patch = { error: e.message || "Gagal memuat data." };
+  loadFlex: async () => {
+    if (HAS_API) {
+      try {
+        const out = await apiPost({ action: "read_flex" });
+        if (out.ok) set({ flex: { header: out.header || [], rows: out.rows || [] } });
+      } catch (e) { console.error("read_flex gagal:", e); }
     }
-    if (get().entries[key]?.req !== req) return;   // sudah ada permintaan yang lebih baru
-    set((s) => ({ entries: { ...s.entries, [key]: { ...s.entries[key], ...patch, loading: false } } }));
+    set({ flexLoaded: true });
+    useUiStore.setState({ calMonth: null });   // kalender re-center ke bulan data terbaru
   },
 
-  // tandai data dengan awalan path tertentu sebagai usang -> dimuat ulang saat dipakai
-  invalidate: (...prefixes) => set((s) => ({
-    entries: Object.fromEntries(Object.entries(s.entries).map(([k, e]) =>
-      [k, prefixes.some((p) => k.startsWith(p)) ? { ...e, stale: true } : e])),
-  })),
+  loadFin: async () => {
+    if (HAS_API) {
+      try {
+        const out = await apiPost({ action: "read_fin" });
+        if (out.ok) set({ fin: { rows: out.rows || [], saldo: out.saldo || {} } });
+      } catch (e) { console.error("read_fin gagal:", e); }
+    }
+    set({ finLoaded: true });
+  },
 
-  reset: () => set({ entries: {} }),
+  // muat data inti sekali (dipanggil dari clientLoader layout dashboard)
+  ensureCore: () => {
+    const s = get();
+    if (s._corePromise) return s._corePromise;
+    const p = Promise.all([s.loadFlex(), s.loadFin()]);
+    set({ _corePromise: p });
+    return p;
+  },
+
+  loadPeserta: async () => {
+    if (!HAS_API) { set((s) => ({ peserta: { raw: s.peserta.raw || [], err: "" } })); return; }
+    const token = sessionToken();
+    if (!token) { set((s) => ({ peserta: { ...s.peserta, err: "Silakan login dulu." } })); return; }
+    const { out, error } = await apiPostVerbose({ action: "read_peserta", token });
+    if (error) set((s) => ({ peserta: { ...s.peserta, err: error } }));
+    else if (out.ok) set({ peserta: { raw: out.tabs || [], err: "" } });
+    else set((s) => ({ peserta: { ...s.peserta, err: out.error || "Gagal memuat data peserta." } }));
+  },
+
+  loadDosen: async () => {
+    if (!HAS_API) { set((s) => ({ dosen: { raw: s.dosen.raw || [], err: "" } })); return; }
+    const token = sessionToken();
+    if (!token) { set((s) => ({ dosen: { ...s.dosen, err: "Silakan login dulu." } })); return; }
+    const { out, error } = await apiPostVerbose({ action: "read_dosen", token });
+    const err = error || (!out.ok && (out.error === "aksi tidak dikenal"
+      ? "Code.gs di server belum versi terbaru (belum ada read_dosen). Tempel Code.gs baru lalu Deploy → New version."
+      : out.error || "Gagal memuat data dosen."));
+    if (err) set((s) => ({ dosen: { ...s.dosen, err } }));
+    else set({ dosen: { raw: out.tabs || [], err: "" } });
+  },
+
+  loadCapaian: async () => {
+    if (!HAS_API) { set((s) => ({ capaian: { raw: s.capaian.raw || [], err: "", loading: false } })); return; }
+    const token = sessionToken();
+    if (!token || get().capaian.loading) return;
+    set((s) => ({ capaian: { ...s.capaian, err: "", loading: true } }));
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 30000);   // maks 30 detik
+    let raw = get().capaian.raw, err = "";
+    try {
+      const out = await apiPost({ action: "read_capaian", token }, { signal: ctl.signal });
+      if (out.ok) raw = out.tabs || [];
+      else err = out.error === "aksi tidak dikenal" ? "Code.gs di server belum versi terbaru (Deploy → New version)." : (out.error || "Gagal memuat capaian.");
+    } catch (e) {
+      err = e && e.name === "AbortError" ? "Server terlalu lama membalas (>30 detik). Klik Refresh Data untuk mencoba lagi."
+        : e instanceof SyntaxError ? "Server membalas error." : "Gagal terhubung ke server.";
+    } finally { clearTimeout(timer); }
+    // gagal -> jangan dicoba ulang terus (dicoba lagi lewat tombol Refresh)
+    set({ capaian: { raw: raw === null ? [] : raw, err, loading: false } });
+  },
+
+  // data yang butuh login dikosongkan saat login/logout
+  resetPrivate: () => set({
+    peserta: { raw: null, err: "" },
+    dosen: { raw: null, err: "" },
+    capaian: { raw: null, err: "", loading: false },
+  }),
 }));
-
-export const invalidate = (...prefixes) => useDataStore.getState().invalidate(...prefixes);
-
-const keyOf = (path, query) => path + "?" + JSON.stringify(Object.entries(query || {})
-  .filter(([, v]) => v !== undefined && v !== null && v !== "")
-  .sort(([a], [b]) => a.localeCompare(b)));
-
-/**
- * Ambil data endpoint GET. Data lama tetap tampil saat filter/halaman berganti (tidak berkedip).
- * `reload(extra)` memuat ulang paksa, mis. reload({ refresh: true }) untuk menyegarkan cache Google Sheets.
- */
-export function useApi(path, query, { enabled = true } = {}) {
-  const key = keyOf(path, query);
-  const entry = useDataStore((s) => s.entries[key]);
-  const token = useAuthStore((s) => s.session?.token);
-  const last = useRef(null);
-  const queryRef = useRef(query);
-  queryRef.current = query;
-
-  useEffect(() => {
-    if (!enabled || !token) return;
-    const e = useDataStore.getState().entries[key];
-    if (e && (e.loading || (!e.stale && (e.data || e.error)))) return;
-    useDataStore.getState().load(key, path, queryRef.current);
-  }, [key, path, enabled, token, entry?.stale]);
-
-  if (entry?.data) last.current = entry.data;
-  return {
-    data: entry?.data ?? last.current,
-    error: entry?.error || null,
-    loading: !entry || !!entry.loading,
-    fresh: !!entry?.data,
-    reload: (extra) => useDataStore.getState().load(key, path, { ...queryRef.current, ...extra }),
-  };
-}

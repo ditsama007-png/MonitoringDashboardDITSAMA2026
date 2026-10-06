@@ -1,235 +1,185 @@
 import { useState } from "react";
-import { PROGRAMS, ROLES } from "../config.js";
-import { api } from "../lib/api.js";
+import { JABATAN, PROGRAMS } from "../config.js";
+import { apiPost, HAS_API } from "../lib/api.js";
 import { useAuthStore } from "../stores/auth.js";
-import { Icon } from "./Icon.jsx";
-import { Spinner } from "./ui.jsx";
+import { SaveMsg } from "./ui.jsx";
 
-const COPY = {
-  login: ["Masuk", "Gunakan email dan password akun Anda."],
-  signup: ["Buat akun", "Setelah mendaftar, kami kirim kode verifikasi ke email Anda."],
-  verify: ["Verifikasi email", "Masukkan 6 digit kode yang kami kirim ke email Anda."],
-  forgot: ["Lupa password", "Masukkan email akun Anda. Kami kirim kode untuk membuat password baru."],
-  reset: ["Buat password baru", "Masukkan kode dari email dan password baru Anda."],
+const SUBTITLE = {
+  login: "Masuk cukup dengan nama/username & password.",
+  signup: "Daftar: isi data, klik 'Kirim kode', masukkan kode dari email, lalu Daftar.",
+  forgot: "Lupa password: masukkan email, klik 'Kirim kode', lalu isi kode + password baru.",
 };
+const BUTTON = { login: "Masuk", signup: "Daftar", forgot: "Reset Password" };
 
-function Brand() {
-  const [failed, setFailed] = useState(false);
-  return failed
-    ? <div className="gate-logo-text"><b>Direktorat Persiapan Bersama</b><span>Institut Teknologi Bandung</span></div>
-    : <img className="gate-logo" src={import.meta.env.BASE_URL + "assets/dpb-logo.png"} alt="Direktorat Persiapan Bersama ITB" onError={() => setFailed(true)} />;
-}
+// ---- mode contoh (tanpa API_URL): akun disimpan di localStorage ----
+const readDemoUsers = () => { try { return JSON.parse(localStorage.getItem("ditsama_users") || "[]"); } catch { return []; } };
+const writeDemoUsers = (u) => { try { localStorage.setItem("ditsama_users", JSON.stringify(u)); } catch { /* abaikan */ } };
 
-function Shell({ children }) {
-  return (
-    <div className="gate">
-      <aside className="gate-side">
-        <img className="gate-badge" src={import.meta.env.BASE_URL + "assets/itb-logo.png"} alt="Logo ITB" width="52" height="52" />
-        <div>
-          <h1>Dashboard Monitoring Program DITSAMA 2026</h1>
-          <p>Direktorat Persiapan Bersama · Institut Teknologi Bandung</p>
-        </div>
-      </aside>
-      <main className="gate-main">{children}</main>
-    </div>
-  );
-}
-
-function PasswordInput({ value, onChange, autoComplete, placeholder }) {
-  const [show, setShow] = useState(false);
-  return (
-    <div className="pw">
-      <input type={show ? "text" : "password"} value={value} onChange={onChange} autoComplete={autoComplete} placeholder={placeholder} required />
-      <button type="button" className="pw-eye" onClick={() => setShow(!show)} aria-label={show ? "Sembunyikan password" : "Tampilkan password"}>
-        <Icon name={show ? "eyeOff" : "eye"} size={17} />
-      </button>
-    </div>
-  );
-}
-
-function Msg({ msg }) {
-  if (!msg) return null;
-  return <div className={"note " + (msg.ok ? "ok" : "err")} role={msg.ok ? "status" : "alert"}><Icon name={msg.ok ? "checkCircle" : "alert"} size={16} /><span>{msg.text}</span></div>;
-}
-
-/** Gerbang Masuk / Daftar / Verifikasi / Lupa password (tampil sampai user login). */
+/** Gerbang Login / Sign up / Lupa password (tampil sampai user login). */
 export function AuthGate() {
   const login = useAuthStore((s) => s.login);
-  const notice = useAuthStore((s) => s.notice);
   const [mode, setMode] = useState("login");
-  const [f, setF] = useState({ name: "", role: "pic", email: "", password: "", code: "", programs: [] });
-  const [msg, setMsg] = useState(notice ? { ok: false, text: notice } : null);
-  const [busy, setBusy] = useState(false);
-
-  const field = (k) => ({ value: f[k], onChange: (e) => setF({ ...f, [k]: e.target.value }) });
-  const go = (m, message = null) => { setMode(m); setMsg(message); setF((x) => ({ ...x, code: "", password: m === "login" ? x.password : "" })); };
-  const toggleProgram = (api) => setF({ ...f, programs: f.programs.includes(api) ? f.programs.filter((k) => k !== api) : [...f.programs, api] });
-  const email = f.email.trim();
-
-  const run = async (fn) => {
-    setBusy(true); setMsg(null);
-    try { await fn(); } catch (e) { return e; } finally { setBusy(false); }
-  };
-  const post = (path, body) => api(path, { method: "POST", body, token: null });
-
-  async function submit(e) {
-    e.preventDefault();
-    const err = await run(async () => {
-      if (mode === "login") {
-        const out = await post("/auth/login", { email, password: f.password });
-        login(out.data.user, out.data.accessToken);
-      } else if (mode === "signup") {
-        if (f.role === "pic" && !f.programs.length) throw new Error("Pilih minimal satu program yang Anda pegang.");
-        await post("/auth/register", {
-          name: f.name.trim(), role: f.role, email, password: f.password,
-          ...(f.role === "pic" ? { programs: f.programs } : {}),
-        });
-        go("verify", { ok: true, text: `Kode verifikasi terkirim ke ${email}. Cek juga folder spam.` });
-      } else if (mode === "verify") {
-        await post("/auth/otp/email/verify", { email, code: f.code.trim() });
-        go("login", { ok: true, text: "Email terverifikasi. Silakan masuk." });
-      } else if (mode === "forgot") {
-        await post("/auth/otp/password-reset", { email });
-        go("reset", { ok: true, text: `Kode terkirim ke ${email}.` });
-      } else if (mode === "reset") {
-        await post("/auth/otp/password-reset/verify", { email, code: f.code.trim(), newPassword: f.password });
-        go("login", { ok: true, text: "Password berhasil diganti. Silakan masuk dengan password baru." });
-      }
-    });
-    if (!err) return;
-    if (mode === "login" && err.raw?.message === "User is not yet verified.") {
-      return go("verify", { ok: false, text: "Email Anda belum diverifikasi. Masukkan kode dari email, atau kirim ulang kode." });
-    }
-    setMsg({ ok: false, text: err.message });
-  }
-
-  async function resend() {
-    if (!email) return setMsg({ ok: false, text: "Isi email dulu." });
-    const err = await run(async () => {
-      await post(mode === "verify" ? "/auth/otp/email" : "/auth/otp/password-reset", { email });
-      setMsg({ ok: true, text: `Kode baru terkirim ke ${email}.` });
-    });
-    if (err) setMsg({ ok: false, text: err.message });
-  }
-
-  const [title, sub] = COPY[mode];
-  const isEntry = mode === "login" || mode === "signup";
-  const button = { login: "Masuk", signup: "Daftar", verify: "Verifikasi", forgot: "Kirim kode", reset: "Simpan password baru" }[mode];
-
-  return (
-    <Shell>
-      <form className="gate-form" onSubmit={submit}>
-        <Brand />
-        {isEntry && (
-          <div className="seg wide" role="tablist">
-            <button type="button" role="tab" aria-selected={mode === "login"} className={mode === "login" ? "on" : ""} onClick={() => go("login")}>Masuk</button>
-            <button type="button" role="tab" aria-selected={mode === "signup"} className={mode === "signup" ? "on" : ""} onClick={() => go("signup")}>Daftar</button>
-          </div>
-        )}
-        <div>
-          <h2 className="gate-title">{title}</h2>
-          <p className="gate-sub">{sub}</p>
-        </div>
-
-        {mode === "signup" && (
-          <>
-            <label className="field"><span className="field-lab">Nama lengkap</span>
-              <input type="text" autoComplete="name" placeholder="mis. Budi Santoso" required {...field("name")} />
-            </label>
-            <label className="field"><span className="field-lab">Jabatan</span>
-              <select {...field("role")}>{ROLES.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
-            </label>
-            {f.role === "pic" && (
-              <fieldset className="checks">
-                <legend className="field-lab">Program yang Anda pegang</legend>
-                <div className="check-grid">
-                  {PROGRAMS.map((p) => (
-                    <label key={p.api} className={"check" + (f.programs.includes(p.api) ? " on" : "")}>
-                      <input type="checkbox" checked={f.programs.includes(p.api)} onChange={() => toggleProgram(p.api)} />
-                      <span>{p.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            )}
-          </>
-        )}
-
-        <label className="field"><span className="field-lab">Email</span>
-          <input type="email" autoComplete="email" placeholder="nama@itb.ac.id" required readOnly={mode === "verify" || mode === "reset"} {...field("email")} />
-        </label>
-
-        {(mode === "verify" || mode === "reset") && (
-          <label className="field"><span className="field-lab">Kode verifikasi</span>
-            <input className="otp" type="text" inputMode="numeric" autoComplete="one-time-code" placeholder="000000" maxLength={6} required {...field("code")} />
-          </label>
-        )}
-
-        {(mode === "login" || mode === "signup" || mode === "reset") && (
-          <label className="field">
-            <span className="field-lab">{mode === "reset" ? "Password baru" : "Password"}</span>
-            <PasswordInput value={f.password} onChange={field("password").onChange}
-              autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder={mode === "reset" ? "password baru" : "password"} />
-          </label>
-        )}
-
-        <Msg msg={msg} />
-
-        <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
-          {busy && <Spinner />}{button}
-        </button>
-
-        <div className="gate-links">
-          {mode === "login" && <button type="button" className="link-btn" onClick={() => go("forgot")}>Lupa password?</button>}
-          {(mode === "verify" || mode === "reset") && <button type="button" className="link-btn" disabled={busy} onClick={resend}>Kirim ulang kode</button>}
-          {!isEntry && <button type="button" className="link-btn" onClick={() => go("login")}><Icon name="left" size={15} />Kembali ke Masuk</button>}
-        </div>
-      </form>
-    </Shell>
-  );
-}
-
-/** Password Akses (muncul setelah login, sebelum data dashboard dibuka). */
-export function AccessOverlay() {
-  const session = useAuthStore((s) => s.session);
-  const unlock = useAuthStore((s) => s.unlock);
-  const logout = useAuthStore((s) => s.logout);
-  const [pass, setPass] = useState("");
+  const [f, setF] = useState({ nama: "", jabatan: JABATAN[0], email: "", code: "", pass: "", programs: [] });
   const [msg, setMsg] = useState(null);
+  const [demoCode, setDemoCode] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  async function check(e) {
-    e.preventDefault();
-    setBusy(true); setMsg(null);
+  const isLogin = mode === "login", isSignup = mode === "signup", isForgot = mode === "forgot";
+  const field = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const switchMode = (m) => { setMode(m); setMsg(null); };
+  const done = (text) => { switchMode("login"); setMsg({ ok: true, text }); };
+  const toggleProgram = (key) => setF({
+    ...f, programs: f.programs.includes(key) ? f.programs.filter((k) => k !== key) : [...f.programs, key],
+  });
+
+  async function sendCode() {
+    if (!f.email.trim()) return setMsg({ ok: false, text: "Isi email dulu." });
+    if (!HAS_API) {   // demo: tampilkan kode via alert
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      setDemoCode(code);
+      alert("MODE DEMO — kode verifikasi kamu: " + code + "\n(Di versi asli, ini dikirim ke email.)");
+      return setMsg({ ok: true, text: "Kode dikirim (demo). Cek popup." });
+    }
+    setMsg({ text: "Mengirim kode..." });
     try {
-      const out = await api("/auth/access", { method: "POST", body: { password: pass }, token: session.loginToken });
-      unlock(out.data.accessToken);
-    } catch (err) {
-      setMsg({ ok: false, text: err.message });
+      const out = await apiPost({ action: "send_code", email: f.email.trim(), purpose: isForgot ? "reset" : "signup" });
+      setMsg(out.ok ? { ok: true, text: "✅ Kode terkirim ke email. Cek inbox/spam." } : { ok: false, text: "❌ " + (out.error || "Gagal kirim kode.") });
+    } catch { setMsg({ ok: false, text: "❌ Gagal terhubung ke server." }); }
+  }
+
+  function demoAuth(nama, email, pass, code) {
+    const store = readDemoUsers();
+    if (isSignup || isForgot) {
+      if (!demoCode || code !== demoCode) return setMsg({ ok: false, text: "Kode salah (klik Kirim kode dulu)." });
+    }
+    if (isSignup) {
+      if (store.some((u) => u.nama.toLowerCase() === nama.toLowerCase())) return setMsg({ ok: false, text: "Nama sudah terdaftar." });
+      writeDemoUsers([...store, { nama, jabatan: f.jabatan, email, password: pass, programs: f.programs }]);
+      setDemoCode(null);
+      return done("✅ Terdaftar (demo). Silakan login.");
+    }
+    if (isForgot) {
+      const idx = store.findIndex((u) => (u.email || "").toLowerCase() === email.toLowerCase());
+      if (idx < 0) return setMsg({ ok: false, text: "Email tidak terdaftar." });
+      store[idx].password = pass; writeDemoUsers(store);
+      setDemoCode(null);
+      return done("✅ Password diubah (demo). Silakan login.");
+    }
+    const u = store.find((x) => x.nama.toLowerCase() === nama.toLowerCase() && x.password === pass);
+    if (!u) return setMsg({ ok: false, text: "Nama/password salah, atau belum sign up." });
+    login({ nama: u.nama, jabatan: u.jabatan, email: u.email, programs: u.programs || [], token: "demo" });
+  }
+
+  async function doAuth(e) {
+    e.preventDefault();
+    const nama = f.nama.trim(), email = f.email.trim(), code = f.code.trim(), pass = f.pass;
+    if (isLogin && (!nama || !pass)) return setMsg({ ok: false, text: "Isi nama & password." });
+    if (isSignup) {
+      if (!nama || !f.jabatan || !email || !pass || !code) return setMsg({ ok: false, text: "Lengkapi semua kolom + kode." });
+      if (f.jabatan === "PIC" && !f.programs.length) return setMsg({ ok: false, text: "Pilih minimal satu program." });
+    }
+    if (isForgot && (!email || !code || !pass)) return setMsg({ ok: false, text: "Isi email, kode, & password baru." });
+    if (!HAS_API) return demoAuth(nama, email, pass, code);
+
+    setMsg({ text: "Memproses..." });
+    setBusy(true);
+    try {
+      const out = await apiPost({
+        action: isForgot ? "reset" : mode, nama, jabatan: f.jabatan, email, password: pass, code, programs: f.programs,
+      });
+      if (!out.ok) return setMsg({ ok: false, text: "❌ " + (out.error || "Gagal.") });
+      if (isSignup) return done("✅ Terdaftar. Silakan login.");
+      if (isForgot) return done("✅ Password diubah. Silakan login.");
+      login({ nama: out.user.nama, jabatan: out.user.jabatan, email: out.user.email, programs: out.user.programs || [], token: out.token });
+    } catch {
+      setMsg({ ok: false, text: "❌ Gagal terhubung ke server." });
     } finally { setBusy(false); }
   }
 
+  // Pilihan program hanya muncul saat SIGN UP dan jabatan = PIC
+  // (Admin & Head Program otomatis akses semua program).
+  const showPrograms = isSignup && f.jabatan === "PIC";
+
   return (
-    <Shell>
-      <form className="gate-form" onSubmit={check}>
-        <Brand />
-        <div className="gate-who">
-          <span className="ava">{(session.name || "?").slice(0, 1).toUpperCase()}</span>
-          <div><b>{session.name}</b><small>{session.email}</small></div>
+    <div className="gate" id="auth-gate">
+      <form className="gate-box" onSubmit={doAuth}>
+        <div className="gate-brand"><span className="badge">ITB</span> Dashboard DITSAMA 2026</div>
+        <div className="tabs">
+          <button type="button" className={"tab" + (isLogin ? " active" : "")} onClick={() => switchMode("login")}>Login</button>
+          <button type="button" className={"tab" + (isSignup ? " active" : "")} onClick={() => switchMode("signup")}>Sign up</button>
         </div>
-        <div>
-          <h2 className="gate-title"><Icon name="lock" size={20} />Password Akses</h2>
-          <p className="gate-sub">Satu langkah lagi. Masukkan Password Akses tim untuk membuka data dashboard.</p>
-        </div>
-        <label className="field"><span className="field-lab">Password Akses</span>
-          <PasswordInput value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="off" placeholder="password akses" />
+        <div className="sub">{SUBTITLE[mode]}</div>
+
+        {!isForgot && <label>Nama / Username<input type="text" placeholder="mis. Budi" value={f.nama} onChange={field("nama")} /></label>}
+        {isSignup && (
+          <label>Jabatan
+            <select value={f.jabatan} onChange={field("jabatan")}>{JABATAN.map((j) => <option key={j}>{j}</option>)}</select>
+          </label>
+        )}
+        {showPrograms && (
+          <div>
+            <div className="prog-title">Program yang dipegang</div>
+            <details className="prog-dd">
+              <summary>{f.programs.length ? f.programs.length + " program dipilih" : "Pilih program (klik untuk buka)…"}</summary>
+              <div className="prog-check">
+                {PROGRAMS.map((p) => (
+                  <label className="prog-item" key={p.key}>
+                    <input type="checkbox" checked={f.programs.includes(p.key)} onChange={() => toggleProgram(p.key)} /> {p.label}
+                  </label>
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
+        {!isLogin && (
+          <>
+            <label>Email<input type="email" placeholder="nama@itb.ac.id" value={f.email} onChange={field("email")} /></label>
+            <button type="button" className="btn-ghost wide" onClick={sendCode}>✉️ Kirim kode ke email</button>
+            <label>Kode Verifikasi (dari email)<input type="text" placeholder="6 digit" value={f.code} onChange={field("code")} /></label>
+          </>
+        )}
+        <label>Password
+          <input type="password" placeholder={isForgot ? "password BARU" : "password"} value={f.pass} onChange={field("pass")} />
         </label>
-        <Msg msg={msg} />
-        <button type="submit" className="btn btn-primary btn-block" disabled={busy}>{busy && <Spinner />}Buka dashboard</button>
+        <button type="submit" className="btn-primary wide" disabled={busy}>{BUTTON[mode]}</button>
+        <div><SaveMsg msg={msg} /></div>
         <div className="gate-links">
-          <button type="button" className="link-btn" onClick={() => logout()}><Icon name="logout" size={15} />Keluar, ganti akun</button>
+          {isLogin
+            ? <a href="#" onClick={(e) => { e.preventDefault(); switchMode("forgot"); }}>Lupa password?</a>
+            : <a href="#" onClick={(e) => { e.preventDefault(); switchMode("login"); }}>← Kembali ke login</a>}
         </div>
       </form>
-    </Shell>
+    </div>
+  );
+}
+
+/** Overlay blur + Password Akses (muncul setelah login). */
+export function AccessOverlay() {
+  const unlock = useAuthStore((s) => s.unlock);
+  const [pass, setPass] = useState("");
+  const [msg, setMsg] = useState(null);
+
+  async function check(e) {
+    e.preventDefault();
+    if (!HAS_API) return unlock();   // mode demo (tanpa server): langsung buka
+    setMsg({ text: "Memeriksa..." });
+    try {
+      const out = await apiPost({ action: "check_access", password: pass });
+      if (out.ok) unlock(); else setMsg({ ok: false, text: "Password Akses salah." });
+    } catch { setMsg({ ok: false, text: "Gagal terhubung ke server." }); }
+  }
+
+  return (
+    <div className="access-overlay" id="access-overlay">
+      <form className="access-box" onSubmit={check}>
+        <div className="gate-brand"><span className="badge">ITB</span> Verifikasi Akses</div>
+        <div className="sub">Masukkan Password Akses untuk membuka dashboard.</div>
+        <label>Password Akses
+          <input type="password" placeholder="password akses" value={pass} autoFocus onChange={(e) => setPass(e.target.value)} />
+        </label>
+        <button type="submit" className="btn-primary wide">Buka Dashboard</button>
+        <SaveMsg msg={msg} />
+      </form>
+    </div>
   );
 }

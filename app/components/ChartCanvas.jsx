@@ -1,19 +1,6 @@
 import Chart from "chart.js/auto";
 import { useEffect, useRef } from "react";
 
-// gaya dasar semua grafik mengikuti dashboard
-Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-Chart.defaults.font.size = 12;
-Chart.defaults.color = "#5d6879";
-Chart.defaults.borderColor = "#E3E8F0";
-Chart.defaults.plugins.legend.labels.boxWidth = 10;
-Chart.defaults.plugins.legend.labels.boxHeight = 10;
-Chart.defaults.plugins.legend.labels.useBorderRadius = true;
-Chart.defaults.plugins.legend.labels.borderRadius = 3;
-Chart.defaults.plugins.tooltip.backgroundColor = "#1A2233";
-Chart.defaults.plugins.tooltip.padding = 10;
-Chart.defaults.plugins.tooltip.cornerRadius = 8;
-
 // plugin zoom (butuh hammerjs -> `window`), jadi didaftarkan hanya di browser
 let zoomReady = null;
 function ensureZoomPlugin() {
@@ -52,8 +39,9 @@ export function ChartCanvas({ config, height = 240, zoom = false, style }) {
     <div style={{ height, position: "relative", ...style }}>
       <canvas ref={canvasRef} />
       {zoom && (
-        <button type="button" className="btn btn-sm zoom-reset"
-          onClick={() => chartRef.current?.resetZoom?.()}>Reset zoom</button>
+        <button type="button" className="zoom-reset mini-btn"
+          style={{ position: "absolute", top: 4, right: 4, zIndex: 2 }}
+          onClick={() => chartRef.current?.resetZoom?.()}>⟲ Reset zoom</button>
       )}
     </div>
   );
