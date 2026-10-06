@@ -1,5 +1,5 @@
 // Komponen kecil yang dipakai berulang.
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { statusClass } from "../lib/format.js";
 
 export function Kpi({ value, label, id }) {
@@ -52,4 +52,28 @@ export function SeeMore({ items, limit = 3, render }) {
 
 export function EmptyRow({ cols, children, className = "empty" }) {
   return <tr><td colSpan={cols} className={className}>{children}</td></tr>;
+}
+
+// kartu "Tentang program" — dipotong 3 baris, tombol Selengkapnya bila lebih panjang
+export function ProgramAbout({ program }) {
+  const ref = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  useLayoutEffect(() => {
+    setOpen(false);
+    const el = ref.current;
+    if (el) setLong(el.scrollHeight > el.clientHeight + 2);
+  }, [program?.key]);
+  if (!program?.desc) return null;
+  return (
+    <div className="card prog-about">
+      <div className="prog-about-head">ℹ️ Tentang program</div>
+      <p ref={ref} className={open ? "" : "clamp"}>{program.desc}</p>
+      {long && (
+        <button className="prog-more" type="button" onClick={() => setOpen(!open)}>
+          {open ? "Ringkas" : "Selengkapnya"}
+        </button>
+      )}
+    </div>
+  );
 }

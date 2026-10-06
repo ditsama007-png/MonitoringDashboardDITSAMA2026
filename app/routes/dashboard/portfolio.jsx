@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Calendar } from "../../components/Calendar.jsx";
 import { ChartCanvas } from "../../components/ChartCanvas.jsx";
 import { Gantt } from "../../components/Gantt.jsx";
-import { EmptyRow, Kpi, SeeMore } from "../../components/ui.jsx";
+import { EmptyRow, Kpi, ProgramAbout, SeeMore } from "../../components/ui.jsx";
+import { PROGRAMS } from "../../config.js";
 import { capParse } from "../../lib/capaian.js";
 import { filterRawByProgramMonth, filterStdRows, useDashFilters } from "../../lib/dashboard.js";
 import {
@@ -35,6 +36,7 @@ export default function Portfolio() {
 
   return (
     <section id="view-dash">
+      <ProgramAbout program={PROGRAMS.find((p) => p.key === programKey)} />
       <div className="perf-strip">
         <PerfItem ic="🎯" val={avgOf((r) => r.nilai > 0 ? r.nilai * 100 : null)} nm="Nilai Capaian Peserta" />
         <PerfItem ic="🙋" val={avgOf((r) => r.hadir > 0 ? r.hadir * 100 : null)} nm="Performa Kehadiran Peserta" />

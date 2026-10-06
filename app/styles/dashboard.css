@@ -64,6 +64,13 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .mini{background:var(--navy);color:#fff;border:none;border-radius:9px;padding:.4rem .6rem;
   font-size:.85rem;font-weight:700;cursor:pointer}
 .title{flex:1;text-align:center;font-size:1.7rem;font-weight:800;margin:.2rem 0;color:var(--ink)}
+.title-abbr{display:table;margin:.35rem auto 0;background:#dbe8fb;color:var(--navy);font-size:.8rem;
+  font-weight:700;padding:.15rem .7rem;border-radius:999px}
+.prog-about{border-left:4px solid var(--blue)}
+.prog-about-head{font-weight:800;font-size:.9rem;color:var(--navy);margin-bottom:.35rem}
+.prog-about p{margin:0;font-size:.88rem;line-height:1.6;color:var(--ink);text-align:justify}
+.prog-about p.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.prog-more{background:none;border:none;padding:0;margin-top:.4rem;color:var(--blue);font-weight:700;font-size:.82rem;cursor:pointer}
 
 /* ---------------- form ---------------- */
 label{display:flex;flex-direction:column;font-size:.8rem;font-weight:600;color:var(--ink);gap:.25rem;margin-bottom:.7rem}
