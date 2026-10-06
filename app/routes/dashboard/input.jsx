@@ -4,7 +4,7 @@ import { EmptyRow, SaveMsg, StatusBadge } from "../../components/ui.jsx";
 import { OPSI_FASE, OPSI_KEBERJALANAN, OPSI_LEVEL_ISU, PROGRAMS } from "../../config.js";
 import { apiPost, HAS_API } from "../../lib/api.js";
 import {
-  canAccessProgram, fileToBase64, fmtTanggal, idLabel, isAllAccess, isFinanceOnly, keyFromStored, labelOf,
+  canAccessProgram, fileToBase64, fmtTanggal, idLabel, isAllAccess, isFinanceOnly, keyFromStored, labelOf, makeFlexId,
   milestoneActive, milestoneNeedsDate, rowIsProgram, splitPeople, statusOf, toDateInput,
 } from "../../lib/format.js";
 import { useAuthStore } from "../../stores/auth.js";
@@ -256,6 +256,8 @@ export default function InputData() {
     const record = buildRecord(form);
     if (!record["PIC"]) record["PIC"] = session.nama;
     if (!record["Nama Kegiatan"]) return setLocalMsg({ ok: false, text: "Nama kegiatan wajib diisi." });
+    // data baru -> ID berformat (Apps Script memakai ID ini bila dikirim); edit tetap pakai ID lama
+    if (!form.editId) record["ID"] = makeFlexId(program, record["Fase Kegiatan"], new Date(), new Set(flex.rows.map((r) => String(r["ID"]))));
     saver.submit({ intent: "save", program, record, editId: form.editId }, { method: "post", encType: "application/json" });
   };
 
