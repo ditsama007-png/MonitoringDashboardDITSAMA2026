@@ -9,7 +9,7 @@
    3. Pilih fungsi `migrasiIdDataMasuk` di toolbar, klik Run.
    4. Sebelum mengubah apa pun, script membuat salinan sheet
       "DataMasuk_backup_<tanggal jam>" sebagai cadangan.
-   Tanggal diambil dari kolom "Waktu Input" (cadangan: "Tanggal Kegiatan").
+   Tanggal diambil dari kolom "Tanggal Kegiatan" (cadangan: "Waktu Input").
    Baris yang ID-nya sudah berformat baru dilewati, jadi aman dijalankan ulang.
    ============================================================ */
 var MIGRASI_SPREADSHEET_ID = "11b_kQGiPNyO-Gkej9dugfQtuoHr2s-D57vxlRv77oCE";
@@ -44,7 +44,7 @@ function migrasiIdDataMasuk() {
   data.forEach(function (r) {
     var lama = String(r[cId] || "");
     if (POLA_BARU.test(lama)) { ids.push([lama]); return; }
-    var d = tanggalDari_(cWaktu >= 0 ? r[cWaktu] : "") || tanggalDari_(cTgl >= 0 ? r[cTgl] : "") || new Date();
+    var d = tanggalDari_(cTgl >= 0 ? r[cTgl] : "") || tanggalDari_(cWaktu >= 0 ? r[cWaktu] : "") || new Date();
     var prog = String(cProg >= 0 ? r[cProg] : "").trim();
     prog = MIGRASI_PROGRAM_KEY[prog] || prog.replace(/\s+/g, "_") || "-";
     var fase = String(cFase >= 0 ? r[cFase] : "").replace(/\s+/g, "") || "-";
