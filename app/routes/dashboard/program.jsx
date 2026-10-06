@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { data, Link, useFetcher } from "react-router";
 import { Gantt } from "../../components/Gantt.jsx";
-import { EmptyRow, Kpi, StatusBadge } from "../../components/ui.jsx";
+import { EmptyRow, Kpi, ProgramAbout, StatusBadge } from "../../components/ui.jsx";
 import { PROGRAMS } from "../../config.js";
 import { apiPost, HAS_API } from "../../lib/api.js";
 import {
@@ -52,7 +52,8 @@ export default function ProgramDashboard({ loaderData }) {
 
   return (
     <section id="view-program">
-      <h1 className="title">Dashboard Program · {program.label}</h1>
+      <h1 className="title">{program.fullName}<span className="title-abbr">{program.label}</span></h1>
+      <ProgramAbout program={program} />
       <div className="kpi-row">
         <Kpi value={total > 0 ? Math.round(selesai / total * 100) + "%" : "0%"} label="Progress Program" />
         <Kpi value={rows.filter((r) => r.status === "Upcoming").length} label="Total Upcoming" />

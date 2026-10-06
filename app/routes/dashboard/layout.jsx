@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useMatches } from "react-router";
 import { useShallow } from "zustand/react/shallow";
 import { AccessOverlay, AuthGate } from "../../components/AuthGate.jsx";
 import { SelectField } from "../../components/ui.jsx";
-import { SUGT_URL } from "../../config.js";
+import { PROGRAMS, SUGT_URL } from "../../config.js";
 import { useDashFilters } from "../../lib/dashboard.js";
 import { isAllAccess, isFinanceOnly, labelOf, ongoingItems, upcomingMilestones } from "../../lib/format.js";
 import { useAuthStore } from "../../stores/auth.js";
@@ -44,6 +44,8 @@ export default function DashboardLayout() {
 
   // `handle` dari route anak: { control: true } -> tampilkan panel Control + judul
   const withControl = useMatches().some((m) => m.handle?.control);
+  // program terpilih di filter Control -> judul memakai nama lengkapnya
+  const dashProgram = useUiStore((s) => PROGRAMS.find((p) => p.label === s.dash.program));
 
   // badge notif jumlah On-Going (merah) & Upcoming (kuning) di tiap menu program
   const badges = useMemo(() => Object.fromEntries(PROGRAM_NAV.map(([key]) =>
@@ -105,7 +107,9 @@ export default function DashboardLayout() {
         <div className="stage-top">
           <button className="mini" type="button" title="Menu utama" onClick={toggleRail}>&#9776;</button>
           {withControl && <button className="mini" type="button" title="Filter" onClick={toggleControl}>&#8942; Control</button>}
-          <h1 className="title" style={{ visibility: withControl ? "visible" : "hidden" }}>Dashboard Program DITSAMA 2026</h1>
+          <h1 className="title" style={{ visibility: withControl ? "visible" : "hidden" }}>
+            {dashProgram ? <>{dashProgram.fullName}<span className="title-abbr">{dashProgram.label}</span></> : "Dashboard Program DITSAMA 2026"}
+          </h1>
         </div>
         <Outlet />
       </main>
