@@ -1,88 +1,77 @@
 import { useState } from "react";
-import { idLabel, labelOf, parseTgl } from "../lib/format.js";
+import { fmtDateLong, MONTHS, statusLabel } from "../lib/format.js";
 import { useUiStore } from "../stores/ui.js";
+import { Icon } from "./Icon.jsx";
+import { Sheet, StatusBadge } from "./ui.jsx";
 
-const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 const HARI = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
-const evClass = (st) => st === "Selesai" ? "ev-done" : (st === "On-Going" ? "ev-ongoing" : "ev-upcoming");
-const badgeClass = (st) => st === "Selesai" ? "st-selesai" : (st === "On-Going" ? "st-ongoing" : "st-upcoming");
 
-/** Kalender kegiatan. rows = baris standar (flexToStd) yang sudah terfilter. */
-export function Calendar({ rows }) {
+/** Kalender kegiatan. events = [{ id, name, date, status, programLabel, pic, location }] dari backend. */
+export function Calendar({ events }) {
   const calMonth = useUiStore((s) => s.calMonth);
   const [detail, setDetail] = useState(null);   // { list, date }
 
-  const dated = rows.filter((r) => r.tanggal && parseTgl(r.tanggal));
-  // default: buka di bulan data TERBARU, biar data baru langsung terlihat
+  const dated = events.map((e) => ({ ...e, d: new Date(e.date) })).filter((e) => !isNaN(e.d));
+  // default: buka di bulan ini bila ada kegiatan, kalau tidak di bulan data terbaru
   let month = calMonth;
   if (!month) {
-    let latest = null;
-    dated.forEach((r) => { const d = parseTgl(r.tanggal); if (!latest || d > latest) latest = d; });
-    const base = latest || new Date();
+    const now = new Date();
+    const hasNow = dated.some((e) => e.d.getFullYear() === now.getFullYear() && e.d.getMonth() === now.getMonth());
+    const latest = dated.reduce((m, e) => (!m || e.d > m ? e.d : m), null);
+    const base = hasNow || !latest ? now : latest;
     month = new Date(base.getFullYear(), base.getMonth(), 1);
   }
   const y = month.getFullYear(), m = month.getMonth();
   const shift = (delta) => useUiStore.setState({ calMonth: new Date(y, m + delta, 1) });
 
   const byDay = {};
-  dated.forEach((r) => {
-    const d = parseTgl(r.tanggal);
-    if (d.getFullYear() === y && d.getMonth() === m) (byDay[d.getDate()] = byDay[d.getDate()] || []).push(r);
-  });
+  dated.forEach((e) => { if (e.d.getFullYear() === y && e.d.getMonth() === m) (byDay[e.d.getDate()] = byDay[e.d.getDate()] || []).push(e); });
   const firstDay = (new Date(y, m, 1).getDay() + 6) % 7;   // Senin=0
   const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const today = new Date();
+  const isToday = (d) => today.getFullYear() === y && today.getMonth() === m && today.getDate() === d;
+  const count = Object.values(byDay).reduce((s, l) => s + l.length, 0);
 
   return (
-    <div className="card">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <div><h3>Kalender Kegiatan</h3><div className="sub">Klik tanggal berkegiatan untuk menyorot barisnya di tabel</div></div>
+    <section className="card">
+      <div className="card-head">
+        <div><h2 className="card-title">Kalender kegiatan</h2><div className="card-sub">{count} kegiatan di bulan ini · klik tanggal untuk rinciannya</div></div>
         <div className="cal-nav">
-          <button className="btn-ghost" type="button" onClick={() => shift(-1)}>‹</button>
-          <span style={{ fontWeight: 700, minWidth: 130, textAlign: "center", display: "inline-block" }}>{NAMA_BULAN[m] + " " + y}</span>
-          <button className="btn-ghost" type="button" onClick={() => shift(1)}>›</button>
+          <button className="icon-btn" type="button" onClick={() => shift(-1)} aria-label="Bulan sebelumnya"><Icon name="left" size={18} /></button>
+          <span className="cal-month">{MONTHS[m]} {y}</span>
+          <button className="icon-btn" type="button" onClick={() => shift(1)} aria-label="Bulan berikutnya"><Icon name="right" size={18} /></button>
         </div>
       </div>
-      <div>
-        <div className="cal-grid cal-head">{HARI.map((h) => <div className="cal-dow" key={h}>{h}</div>)}</div>
-        <div className="cal-grid">
-          {Array.from({ length: firstDay }, (_, i) => <div className="cal-cell empty" key={"e" + i} />)}
-          {Array.from({ length: daysInMonth }, (_, i) => {
-            const d = i + 1, ev = byDay[d];
-            if (!ev) return <div className="cal-cell" key={d}><div className="cal-num">{d}</div></div>;
-            return (
-              <div className="cal-cell has-ev" key={d} onClick={() => setDetail({ list: ev, date: new Date(y, m, d) })}>
-                <div className="cal-num">{d}</div>
-                {ev.slice(0, 3).map((r, j) => <div className={"cal-ev " + evClass(r.status)} key={j}>{r.kegiatan || r.jenis || "Kegiatan"}</div>)}
-                {ev.length > 3 && <div className="cal-more">+{ev.length - 3}</div>}
-              </div>
-            );
-          })}
-        </div>
-        <div className="cal-legend">
-          <span><i className="dot ev-upcoming" /> Akan Datang</span>
-          <span><i className="dot ev-ongoing" /> Berlangsung</span>
-          <span><i className="dot ev-done" /> Selesai</span>
-        </div>
+      <div className="cal-grid cal-head">{HARI.map((h) => <div className="cal-dow" key={h}>{h}</div>)}</div>
+      <div className="cal-grid">
+        {Array.from({ length: firstDay }, (_, i) => <div className="cal-cell blank" key={"e" + i} />)}
+        {Array.from({ length: daysInMonth }, (_, i) => {
+          const d = i + 1, ev = byDay[d];
+          const cls = "cal-cell" + (ev ? " has-ev" : "") + (isToday(d) ? " today" : "");
+          if (!ev) return <div className={cls} key={d}><span className="cal-num">{d}</span></div>;
+          return (
+            <button type="button" className={cls} key={d} onClick={() => setDetail({ list: ev, date: new Date(y, m, d) })}
+              aria-label={`${d} ${MONTHS[m]}: ${ev.length} kegiatan`}>
+              <span className="cal-num">{d}</span>
+              {ev.slice(0, 2).map((e) => <span className={"cal-ev ev-" + e.status} key={e.id}>{e.name}</span>)}
+              {ev.length > 2 && <span className="cal-more">+{ev.length - 2} lagi</span>}
+              <span className="cal-dots">{ev.slice(0, 4).map((e) => <i key={e.id} className={"ev-" + e.status} />)}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="legend">
+        {["upcoming", "ongoing", "done"].map((s) => <span key={s}><i className={"ev-" + s} />{statusLabel(s)}</span>)}
       </div>
 
-      {detail && (
-        <div className="cal-modal" onClick={(e) => { if (e.target === e.currentTarget) setDetail(null); }}>
-          <div className="cal-modal-box">
-            <button className="cal-modal-x" type="button" onClick={() => setDetail(null)}>✕</button>
-            <div className="cal-modal-body">
-              <h3 style={{ margin: "0 0 4px" }}>📅 {detail.date.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</h3>
-              <div className="sub" style={{ marginBottom: 10 }}>{detail.list.length} kegiatan</div>
-              {detail.list.map((r, i) => (
-                <div className="cal-detail-item" key={i}>
-                  <div><b>{r.kegiatan || r.jenis || "Kegiatan"}</b> <span className={"badge " + badgeClass(r.status)}>{idLabel(r.status)}</span></div>
-                  <div className="sub">👤 PIC: {r.pic || "-"} &nbsp;·&nbsp; 🏷️ {labelOf(r._prog) || "-"}</div>
-                  {r.lokasi && <div className="sub">📍 {r.lokasi}</div>}
-                </div>
-              ))}
-            </div>
+      <Sheet open={!!detail} onClose={() => setDetail(null)} title={detail ? fmtDateLong(detail.date) : ""} sub={detail && `${detail.list.length} kegiatan`}>
+        {detail && detail.list.map((e) => (
+          <div className="cal-item" key={e.id}>
+            <div className="cal-item-top"><b>{e.name}</b><StatusBadge status={e.status} /></div>
+            <div className="row-meta"><span className="ptag">{e.programLabel}</span>{e.pic && <span>PIC {e.pic}</span>}{e.location && <span>{e.location}</span>}</div>
           </div>
-        </div>
-      )}
-    </div>
+        ))}
+      </Sheet>
+    </section>
   );
 }
