@@ -20,6 +20,17 @@ export function labelFromStored(p) {
   const byKey = allPrograms().find((x) => x.key === p);
   return byKey ? byKey.label : p;
 }
+// ID baris DataMasuk: <4 digit acak>-<dd>-<mm>-<yyyy kegiatan>/<program>/<fase>, mis. 4821-06-10-2026/SIAP/Fase1
+// (fase tanpa spasi; "-" bila kosong). `taken` = ID yang sudah ada, supaya tidak dobel.
+export function makeFlexId(programKey, fase, date = new Date(), taken = new Set()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  const tgl = pad(date.getDate()) + "-" + pad(date.getMonth() + 1) + "-" + date.getFullYear();
+  const jenis = String(fase || "").replace(/\s+/g, "") || "-";
+  let id;
+  do id = (1000 + Math.floor(Math.random() * 9000)) + "-" + tgl + "/" + programKey + "/" + jenis;
+  while (taken.has(id));
+  return id;
+}
 // baris DataMasuk milik program `key` (kolom Program berisi kode ATAU label)
 export function rowIsProgram(r, key) {
   const p = String(r["Program"] || "");
