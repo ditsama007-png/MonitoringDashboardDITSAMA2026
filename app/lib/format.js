@@ -117,6 +117,9 @@ export function statusOf(r) {
   const w = inWindow(d);
   return w === "before" ? "Upcoming" : w === "after" ? "Selesai" : "On-Going";
 }
+// label tampilan Bahasa Indonesia untuk nilai status/level (nilai aslinya di Sheets tidak diubah)
+const ID_LABEL = { "Upcoming": "Akan Datang", "On-Going": "Berlangsung", "High": "Tinggi", "Medium": "Sedang", "Low": "Rendah" };
+export const idLabel = (v) => ID_LABEL[v] ?? v;
 export const statusClass = (st) => "st-" + st.toLowerCase().replace(/[^a-z]/g, "");
 export function milestoneNeedsDate(r) { return String(r["Mode"] || "") === "Upcoming Milestone"; }
 export function milestoneActive(r) {

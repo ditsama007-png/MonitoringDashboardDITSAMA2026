@@ -4,7 +4,7 @@ import { EmptyRow, SaveMsg, StatusBadge } from "../../components/ui.jsx";
 import { OPSI_FASE, OPSI_KEBERJALANAN, OPSI_LEVEL_ISU, PROGRAMS } from "../../config.js";
 import { apiPost, HAS_API } from "../../lib/api.js";
 import {
-  canAccessProgram, fileToBase64, fmtTanggal, isAllAccess, isFinanceOnly, keyFromStored, labelOf,
+  canAccessProgram, fileToBase64, fmtTanggal, idLabel, isAllAccess, isFinanceOnly, keyFromStored, labelOf,
   milestoneActive, milestoneNeedsDate, rowIsProgram, splitPeople, statusOf, toDateInput,
 } from "../../lib/format.js";
 import { useAuthStore } from "../../stores/auth.js";
@@ -41,7 +41,7 @@ export async function clientAction({ request }) {
     }
     await useDataStore.getState().loadFlex();
     const message = body.intent !== "save" ? "" : body.editId
-      ? "✅ Milestone terisi & tersimpan."
+      ? "✅ Agenda terisi & tersimpan."
       : "✅ Tersimpan. Isi lagi atau klik 'Tambahkan data lainnya'.";
     return { intent: body.intent, ok: true, message };
   } catch {
@@ -329,8 +329,8 @@ function InputForm({ form: f, setForm, session }) {
     <>
       <div style={{ marginBottom: ".6rem" }}>
         <span style={{ fontSize: ".8rem", fontWeight: 700, color: "#1B3A6B", marginRight: 8 }}>Jenis pengisian:</span>
-        <button type="button" className={"mode-btn" + (f.mode === "ongoing" ? " active" : "")} onClick={() => set({ mode: "ongoing" })}>Data On-Going</button>
-        <button type="button" className={"mode-btn" + (f.mode === "milestone" ? " active" : "")} onClick={() => set({ mode: "milestone" })}>Upcoming Milestone</button>
+        <button type="button" className={"mode-btn" + (f.mode === "ongoing" ? " active" : "")} onClick={() => set({ mode: "ongoing" })}>Data Berlangsung</button>
+        <button type="button" className={"mode-btn" + (f.mode === "milestone" ? " active" : "")} onClick={() => set({ mode: "milestone" })}>Agenda Mendatang</button>
       </div>
 
       <div className="grid-2">
@@ -401,15 +401,15 @@ function InputForm({ form: f, setForm, session }) {
           </div>
 
           <div className="dyn-box">
-            <div className="dyn-head"><span>Issue / Alert (isi hanya jika ADA masalah)</span>
-              <button type="button" className="btn-ghost" onClick={() => addRow("issues", newIssue())}>➕ Tambah issue</button></div>
-            <div className="sub" style={{ marginBottom: 6 }}>Kosongkan kalau tidak ada issue. Tiap issue = Nama, Level, Keterangan, Problem Solving.</div>
+            <div className="dyn-head"><span>Isu / Peringatan (isi hanya jika ADA masalah)</span>
+              <button type="button" className="btn-ghost" onClick={() => addRow("issues", newIssue())}>➕ Tambah isu</button></div>
+            <div className="sub" style={{ marginBottom: 6 }}>Kosongkan kalau tidak ada isu. Tiap isu = Nama, Level, Keterangan, Penyelesaian Masalah.</div>
             {f.issues.map((it) => (
               <div className="issue-row" key={it.id}>
                 <div className="grid-2">
                   <label>Tentukan Level Isu dulu
                     <select value={it.level} onChange={(e) => updRow("issues", it.id, { level: e.target.value })}>
-                      {withCurrent(OPSI_LEVEL_ISU, it.level).map((o) => <option key={o}>{o}</option>)}
+                      {withCurrent(OPSI_LEVEL_ISU, it.level).map((o) => <option key={o} value={o}>{idLabel(o)}</option>)}
                     </select>
                   </label>
                   <div />
@@ -418,10 +418,10 @@ function InputForm({ form: f, setForm, session }) {
                   <div>
                     <div className="grid-2">
                       <label>Nama Isu<input placeholder="mis. Jadwal bentrok" value={it.nama} onChange={(e) => updRow("issues", it.id, { nama: e.target.value })} /></label>
-                      <label>Issue dengan pihak siapa (penyelenggara)?<input placeholder="mis. sekolah / mitra" value={it.pihak} onChange={(e) => updRow("issues", it.id, { pihak: e.target.value })} /></label>
+                      <label>Isu dengan pihak siapa (penyelenggara)?<input placeholder="mis. sekolah / mitra" value={it.pihak} onChange={(e) => updRow("issues", it.id, { pihak: e.target.value })} /></label>
                     </div>
                     <div className="grid-2">
-                      <label>Problem Solving<input placeholder="penanganan yang dilakukan" value={it.solve} onChange={(e) => updRow("issues", it.id, { solve: e.target.value })} /></label>
+                      <label>Penyelesaian Masalah<input placeholder="penanganan yang dilakukan" value={it.solve} onChange={(e) => updRow("issues", it.id, { solve: e.target.value })} /></label>
                       <div />
                     </div>
                   </div>
@@ -433,7 +433,7 @@ function InputForm({ form: f, setForm, session }) {
 
           <div className="grid-3">
             <label>Nilai Capaian (%)<input type="number" min="0" max="100" placeholder="80" {...field("nilai")} /></label>
-            <label>Feedback (%)<input type="number" min="0" max="100" placeholder="85" {...field("feedback")} /></label>
+            <label>Umpan Balik (%)<input type="number" min="0" max="100" placeholder="85" {...field("feedback")} /></label>
             <label>Keberjalanan Kegiatan
               <select {...field("keberjalanan")}>{withCurrent(["", ...OPSI_KEBERJALANAN], f.keberjalanan).map((o) => <option key={o}>{o}</option>)}</select>
             </label>
@@ -491,7 +491,7 @@ function DataMasukTable({ programKey, label }) {
           <h3>Data Masuk (semua kolom fleksibel · program terpilih)</h3>
           <div className="sub">Tersimpan di sheet "DataMasuk". Kolom menyesuaikan otomatis.</div>
         </div>
-        <button className="btn-ghost" type="button" onClick={refresh}>{refreshing ? "⏳ Memuat..." : "🔄 Refresh data"}</button>
+        <button className="btn-ghost" type="button" onClick={refresh}>{refreshing ? "⏳ Memuat..." : "🔄 Muat ulang data"}</button>
       </div>
       {fetcher.state === "idle" && fetcher.data && !fetcher.data.ok && (
         <div className="save-msg err" style={{ display: "block", margin: "6px 0" }}>{fetcher.data.message}</div>
@@ -509,7 +509,7 @@ function DataMasukTable({ programKey, label }) {
                   return <td key={h}>{h === "Tanggal Kegiatan" ? fmtTanggal(v) : String(v)}</td>;
                 })}
                 <td className="act-cell" style={{ whiteSpace: "nowrap" }}>
-                  <button type="button" className="mini-btn edit" onClick={() => edit(r)}>✎ Edit</button>{" "}
+                  <button type="button" className="mini-btn edit" onClick={() => edit(r)}>✎ Ubah</button>{" "}
                   <button type="button" className="mini-btn del" onClick={() => del(r["ID"])}>🗑 Hapus</button>
                   {milestoneNeedsDate(r) && (
                     <> <button type="button" className={"mini-btn fill" + (milestoneActive(r) ? "" : " off")} onClick={() => fillDate(r)}>📅 Isi tanggal</button></>

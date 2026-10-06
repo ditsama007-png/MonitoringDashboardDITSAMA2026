@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { labelOf, parseTgl } from "../lib/format.js";
+import { idLabel, labelOf, parseTgl } from "../lib/format.js";
 import { useUiStore } from "../stores/ui.js";
 
 const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -59,8 +59,8 @@ export function Calendar({ rows }) {
           })}
         </div>
         <div className="cal-legend">
-          <span><i className="dot ev-upcoming" /> Upcoming</span>
-          <span><i className="dot ev-ongoing" /> On-Going</span>
+          <span><i className="dot ev-upcoming" /> Akan Datang</span>
+          <span><i className="dot ev-ongoing" /> Berlangsung</span>
           <span><i className="dot ev-done" /> Selesai</span>
         </div>
       </div>
@@ -74,7 +74,7 @@ export function Calendar({ rows }) {
               <div className="sub" style={{ marginBottom: 10 }}>{detail.list.length} kegiatan</div>
               {detail.list.map((r, i) => (
                 <div className="cal-detail-item" key={i}>
-                  <div><b>{r.kegiatan || r.jenis || "Kegiatan"}</b> <span className={"badge " + badgeClass(r.status)}>{r.status}</span></div>
+                  <div><b>{r.kegiatan || r.jenis || "Kegiatan"}</b> <span className={"badge " + badgeClass(r.status)}>{idLabel(r.status)}</span></div>
                   <div className="sub">👤 PIC: {r.pic || "-"} &nbsp;·&nbsp; 🏷️ {labelOf(r._prog) || "-"}</div>
                   {r.lokasi && <div className="sub">📍 {r.lokasi}</div>}
                 </div>

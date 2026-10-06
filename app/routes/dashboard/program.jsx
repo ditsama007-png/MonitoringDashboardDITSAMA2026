@@ -55,14 +55,14 @@ export default function ProgramDashboard({ loaderData }) {
       <h1 className="title">{program.fullName}<span className="title-abbr">{program.label}</span></h1>
       <ProgramAbout program={program} />
       <div className="kpi-row">
-        <Kpi value={total > 0 ? Math.round(selesai / total * 100) + "%" : "0%"} label="Progress Program" />
-        <Kpi value={rows.filter((r) => r.status === "Upcoming").length} label="Total Upcoming" />
-        <Kpi value={rows.filter((r) => r.status === "On-Going").length} label="Total On-Going" />
+        <Kpi value={total > 0 ? Math.round(selesai / total * 100) + "%" : "0%"} label="Kemajuan Program" />
+        <Kpi value={rows.filter((r) => r.status === "Upcoming").length} label="Total Akan Datang" />
+        <Kpi value={rows.filter((r) => r.status === "On-Going").length} label="Total Berlangsung" />
         <Kpi value={selesai} label="Total Selesai" />
       </div>
       <ProgramMilestones programKey={key} flexRows={flex.rows} />
       <div className="card">
-        <h3>Timeline Fase Kegiatan</h3>
+        <h3>Linimasa Fase Kegiatan</h3>
         <div className="sub">Rentang tiap fase berdasarkan tanggal kegiatan (dari Data Masuk)</div>
         <Gantt items={rawRows
           .map((r) => ({ d: parseTgl(r["Tanggal Kegiatan"]), fase: String(r["Fase Kegiatan"] || "").trim() }))
@@ -127,8 +127,8 @@ function ProgramMilestones({ programKey, flexRows }) {
           {fetcher.data.message}
         </div>
       )}
-      {card("Sedang Berlangsung (On-Going)", ongoing, "red")}
-      {card("Upcoming Milestone", upcoming, "yellow")}
+      {card("Sedang Berlangsung", ongoing, "red")}
+      {card("Agenda Mendatang", upcoming, "yellow")}
     </div>
   );
 }

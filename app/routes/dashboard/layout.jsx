@@ -5,7 +5,7 @@ import { AccessOverlay, AuthGate } from "../../components/AuthGate.jsx";
 import { SelectField } from "../../components/ui.jsx";
 import { PROGRAMS, SUGT_URL } from "../../config.js";
 import { useDashFilters } from "../../lib/dashboard.js";
-import { isAllAccess, isFinanceOnly, labelOf, ongoingItems, upcomingMilestones } from "../../lib/format.js";
+import { idLabel, isAllAccess, isFinanceOnly, labelOf, ongoingItems, upcomingMilestones } from "../../lib/format.js";
 import { useAuthStore } from "../../stores/auth.js";
 import { useDataStore } from "../../stores/data.js";
 import { useUiStore } from "../../stores/ui.js";
@@ -27,7 +27,7 @@ export function clientLoader() {
 }
 
 const PROGRAM_NAV = [
-  ["SIAP", "Program SIAP"], ["INSPIRASI_EDQ", "Program EduQuest"], ["INSPIRASI_SCD", "Program SCD"],
+  ["SIAP", "Program SIAP"], ["INSPIRASI_EDQ", "Program EduQuest"], ["INSPIRASI_SCD", "Program PSCD"],
   ["OSN", "Program OSN"], ["OPSI", "Program OPSI"], ["RISET", "Program Riset"], ["BTI", "Program BTI"],
   ["WIT", "Program WIT"], ["MAUNG", "Program MAUNG"],
 ];
@@ -70,12 +70,12 @@ export default function DashboardLayout() {
           <button className="hamb" type="button" title="Sembunyikan menu" onClick={toggleRail}>&#9776;</button>
         </div>
         <nav className="rail-nav">
-          <Link className="nav-home" to="/">&#127968; Home</Link>
-          <NavLink className={navClass} to="/dashboard" end>Program Portfolio</NavLink>
-          <NavLink className={navClass} to="/dashboard/financial">💰 Financial</NavLink>
+          <Link className="nav-home" to="/">&#127968; Beranda</Link>
+          <NavLink className={navClass} to="/dashboard" end>Portofolio Program</NavLink>
+          <NavLink className={navClass} to="/dashboard/financial">💰 Keuangan</NavLink>
           <NavLink className={navClass} to="/dashboard/peserta">🎓 Peserta</NavLink>
           <NavLink className={navClass} to="/dashboard/dosen">👨‍🏫 Portofolio Dosen</NavLink>
-          {/* Finance hanya boleh mengisi menu Financial */}
+          {/* Finance hanya boleh mengisi menu Keuangan */}
           {!(session && isFinanceOnly(session.jabatan)) && (
             <NavLink className={navClass} to="/dashboard/input">📝 Input Data</NavLink>
           )}
@@ -83,8 +83,8 @@ export default function DashboardLayout() {
           {PROGRAM_NAV.map(([key, text]) => (
             <NavLink key={key} className={navClass} to={`/dashboard/program/${key}`}>
               {text}
-              {badges[key].on > 0 && <span className="nav-badge red" title="On-Going">{badges[key].on}</span>}
-              {badges[key].up > 0 && <span className="nav-badge yellow" title="Upcoming">{badges[key].up}</span>}
+              {badges[key].on > 0 && <span className="nav-badge red" title="Berlangsung">{badges[key].on}</span>}
+              {badges[key].up > 0 && <span className="nav-badge yellow" title="Akan Datang">{badges[key].up}</span>}
             </NavLink>
           ))}
           <a className="nav-item nav-ext" href={SUGT_URL || "#"} target="_blank" rel="noopener" onClick={openSugt}>
@@ -106,7 +106,7 @@ export default function DashboardLayout() {
       <main className="stage">
         <div className="stage-top">
           <button className="mini" type="button" title="Menu utama" onClick={toggleRail}>&#9776;</button>
-          {withControl && <button className="mini" type="button" title="Filter" onClick={toggleControl}>&#8942; Control</button>}
+          {withControl && <button className="mini" type="button" title="Filter" onClick={toggleControl}>&#8942; Filter</button>}
           <h1 className="title" style={{ visibility: withControl ? "visible" : "hidden" }}>
             {dashProgram ? <>{dashProgram.fullName}<span className="title-abbr">{dashProgram.label}</span></> : "Dashboard Program DITSAMA 2026"}
           </h1>
@@ -156,12 +156,12 @@ function ControlPanel({ hidden, onToggle }) {
     setBusy(false);
   };
   const sel = (key, label) => (
-    <SelectField label={label} value={values[key]} options={opts[key]} onChange={(v) => patch("dash", { [key]: v })} />
+    <SelectField label={label} value={values[key]} options={opts[key].map((o) => [o, idLabel(o)])} onChange={(v) => patch("dash", { [key]: v })} />
   );
 
   return (
     <aside className={"control" + (hidden ? " hide" : "")} id="control">
-      <div className="control-head">Control
+      <div className="control-head">Filter
         <button className="chev" type="button" title="Sembunyikan filter" onClick={onToggle}>&#8249;</button>
       </div>
       <div className="control-body">
@@ -172,7 +172,7 @@ function ControlPanel({ hidden, onToggle }) {
         {sel("kegiatan", "Kegiatan")}
         {sel("level", "Level Isu")}
         <button className="btn-ghost" type="button" disabled={busy} onClick={refresh}>
-          {busy ? "⏳ Memuat…" : <>&#128260; Refresh Data</>}
+          {busy ? "⏳ Memuat…" : <>&#128260; Muat Ulang Data</>}
         </button>
       </div>
     </aside>

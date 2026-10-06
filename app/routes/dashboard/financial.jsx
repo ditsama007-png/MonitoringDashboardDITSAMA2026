@@ -96,7 +96,7 @@ export default function Financial() {
 
   return (
     <section id="view-financial">
-      <h1 className="title">Financial</h1>
+      <h1 className="title">Keuangan</h1>
 
       <div className="card">
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
@@ -104,7 +104,7 @@ export default function Financial() {
           {sel("tahun", "Tahun", 110)}
           {sel("bulan", "Bulan", 130)}
           {sel("jenis", "Jenis Pengajuan", 150)}
-          <button className="btn-ghost" type="button" onClick={() => loadFin()}>🔄 Refresh</button>
+          <button className="btn-ghost" type="button" onClick={() => loadFin()}>🔄 Muat Ulang</button>
         </div>
       </div>
 

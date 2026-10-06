@@ -54,7 +54,7 @@ export default function Home() {
                 <path d="M2 20c0-3 2.5-5 6-5s6 2 6 5" /><path d="M14 15c3 0 6 2 6 5" />
               </svg>
             </span>
-            <span className="lbl">About</span>
+            <span className="lbl">Tentang</span>
           </button>
 
           <Link className="menu-item" to="/dashboard">
@@ -74,7 +74,7 @@ export default function Home() {
 
       {/* ================= ABOUT ================= */}
       <section className="section" id="about">
-        <h2>About DITSAMA</h2>
+        <h2>Tentang DITSAMA</h2>
         <p>
           Direktorat Persiapan Bersama (DPB) Institut Teknologi Bandung menaungi program
           persiapan pra-universitas DITSAMA. Dashboard ini digunakan untuk memantau
