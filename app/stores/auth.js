@@ -4,18 +4,22 @@ import { create } from "zustand";
 import { useDataStore } from "./data.js";
 
 export const useAuthStore = create((set) => ({
-  session: null,          // { nama, jabatan, email, programs, token }
-  accessUnlocked: false,  // sudah memasukkan Password Akses?
+  // { name, email, role, programs, loginToken, token }
+  // token = token setelah Password Akses (dipakai untuk semua data); null -> belum diverifikasi
+  session: null,
+  notice: "",   // pesan untuk gerbang login (mis. sesi berakhir)
 
-  login: (session) => {
-    set({ session, accessUnlocked: false });
-    const data = useDataStore.getState();
-    data.resetPrivate();
-    data.loadCapaian();   // mulai langsung, paralel dgn data lain
+  login: (user, loginToken) => {
+    useDataStore.getState().reset();
+    set({
+      session: { name: user.name, email: user.email, role: user.role, programs: user.programs || [], loginToken, token: null },
+      notice: "",
+    });
   },
-  unlock: () => set({ accessUnlocked: true }),
-  logout: () => {
-    set({ session: null, accessUnlocked: false });
-    useDataStore.getState().resetPrivate();
+  unlock: (token) => set((s) => ({ session: s.session && { ...s.session, token } })),
+  lockAccess: () => set((s) => ({ session: s.session && { ...s.session, token: null } })),
+  logout: (notice = "") => {
+    set({ session: null, notice });
+    useDataStore.getState().reset();
   },
 }));
