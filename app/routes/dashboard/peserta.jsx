@@ -76,7 +76,7 @@ export default function Peserta() {
             <SelectField key={key} label={label} value={values[key]} options={opts[key]} onChange={(v) => setFilter(key, v)} />
           ))}
           <SelectField label="Ujian" value={ujianSel} options={ujianOpts} onChange={(v) => setFilter("ujian", v)} />
-          <button className="btn-ghost" type="button" onClick={reload}>{loading ? "⏳ Memuat..." : "🔄 Refresh"}</button>
+          <button className="btn-ghost" type="button" onClick={reload}>{loading ? "⏳ Memuat..." : "🔄 Muat Ulang"}</button>
         </div>
         <div className="sub" style={{ margin: ".4rem 0 0", color: msgErr ? "var(--red)" : undefined }}>{msg}</div>
       </div>
@@ -254,7 +254,7 @@ function Ranking({ rows, examKeys, uj, ujLabel }) {
   return (
     <div className="card">
       <div className="pst-head">
-        <div><h3>Ranking Peserta</h3>
+        <div><h3>Peringkat Peserta</h3>
           <div className="sub">{scored.length
             ? `Diurutkan menurut ${metricName.charAt(0).toLowerCase() + metricName.slice(1)} · ${scored.length} peserta punya nilai` + (sort === "naik" ? " (minimal 2 ujian)" : "")
             : "Belum ada peserta dengan nilai untuk urutan ini."}</div></div>
@@ -265,7 +265,7 @@ function Ranking({ rows, examKeys, uj, ujLabel }) {
         </div>
       </div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Ranking</th><th>Nama Peserta</th><th>Program</th><th>Sekolah</th><th>Provinsi</th><th>Fakultas/Jurusan</th>
+        <thead><tr><th>Peringkat</th><th>Nama Peserta</th><th>Program</th><th>Sekolah</th><th>Provinsi</th><th>Fakultas/Jurusan</th>
           <th>Kelompok</th><th>Indeks {ujLabel}</th>{examKeys.map((k) => <th key={k}>{pstExamLabel(k)}</th>)}<th>{metricName}</th></tr></thead>
         <tbody>
           {!show.length && <tr><td colSpan={9 + examKeys.length} className="nil-muted">Belum ada data nilai.</td></tr>}

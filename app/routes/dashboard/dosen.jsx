@@ -67,7 +67,7 @@ export default function Dosen() {
             <SelectField key={key} label={label} value={values[key]} options={opts[key]} onChange={(v) => patch("dsn", { [key]: v })} />
           ))}
           <SelectField label="Minimal Responden" value={ui.minResp} options={["1", "5", "10", "30"]} onChange={(v) => patch("dsn", { minResp: v })} />
-          <button className="btn-ghost" type="button" onClick={reload}>{loading ? "⏳ Memuat..." : "🔄 Refresh"}</button>
+          <button className="btn-ghost" type="button" onClick={reload}>{loading ? "⏳ Memuat..." : "🔄 Muat Ulang"}</button>
         </div>
         <div className="sub" style={{ margin: ".4rem 0 0", color: msgErr ? "var(--red)" : undefined }}>{msg}</div>
       </div>
@@ -177,12 +177,12 @@ function DosenTable({ dosen, minResp, selected, onSelect }) {
   return (
     <div className="card">
       <div className="pst-head">
-        <div><h3>Tabel Ranking Dosen</h3>
+        <div><h3>Tabel Peringkat Dosen</h3>
           <div className="sub">{`${dosen.length} dosen` + (minResp > 1 ? ` (minimal ${minResp} penilaian)` : "") + " · klik baris untuk melihat portofolio"}</div></div>
         <input type="search" placeholder="Cari dosen…" style={{ minWidth: 220 }} value={search} onChange={(e) => patch("dsn", { search: e.target.value })} />
       </div>
       <div className="table-wrap"><table>
-        <thead><tr><th>Ranking</th><th>Nama Dosen</th><th>Mata Kuliah</th><th>Metode</th><th>Program</th>
+        <thead><tr><th>Peringkat</th><th>Nama Dosen</th><th>Mata Kuliah</th><th>Metode</th><th>Program</th>
           <th>Penilaian</th><th>Sebaran 1–5</th><th>Rata-rata</th><th>Predikat</th></tr></thead>
         <tbody>
           {!list.length && <tr><td colSpan={9} className="nil-muted">Belum ada data penilaian dosen.</td></tr>}

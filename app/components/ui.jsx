@@ -1,6 +1,6 @@
 // Komponen kecil yang dipakai berulang.
 import { useLayoutEffect, useRef, useState } from "react";
-import { statusClass } from "../lib/format.js";
+import { idLabel, statusClass } from "../lib/format.js";
 
 export function Kpi({ value, label, id }) {
   return (
@@ -27,7 +27,7 @@ export function SelectField({ label, value, options, onChange, style }) {
 }
 
 export function StatusBadge({ status }) {
-  return <span className={"status-badge " + statusClass(status)}>{status}</span>;
+  return <span className={"status-badge " + statusClass(status)}>{idLabel(status)}</span>;
 }
 
 export function SaveMsg({ msg }) {

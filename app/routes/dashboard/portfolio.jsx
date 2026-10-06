@@ -7,7 +7,7 @@ import { PROGRAMS } from "../../config.js";
 import { capParse } from "../../lib/capaian.js";
 import { filterRawByProgramMonth, filterStdRows, useDashFilters } from "../../lib/dashboard.js";
 import {
-  driveThumb, KEBER_SKOR, keyFromStored, labelFromStored, labelOf, normNamaOrang, num, parseTgl, programProgress,
+  driveThumb, idLabel, KEBER_SKOR, keyFromStored, labelFromStored, labelOf, normNamaOrang, num, parseTgl, programProgress,
   progressStatus, splitPeople,
 } from "../../lib/format.js";
 import { useAuthStore } from "../../stores/auth.js";
@@ -41,13 +41,13 @@ export default function Portfolio() {
         <PerfItem ic="🎯" val={avgOf((r) => r.nilai > 0 ? r.nilai * 100 : null)} nm="Nilai Capaian Peserta" />
         <PerfItem ic="🙋" val={avgOf((r) => r.hadir > 0 ? r.hadir * 100 : null)} nm="Performa Kehadiran Peserta" />
         <PerfItem ic="📈" val={avgOf(kbScore)} nm="Performa Keberjalanan Aktivitas" />
-        <PerfItem ic="💬" val={avgOf((r) => r.feedback > 0 ? r.feedback * 100 : null)} nm="Feedback Peserta" />
-        <PerfItem ic="⚠️" val={avgOf((r) => r.issueAlert !== undefined ? r.issueAlert * 100 : null)} nm="Nilai Issue & Alert" />
+        <PerfItem ic="💬" val={avgOf((r) => r.feedback > 0 ? r.feedback * 100 : null)} nm="Umpan Balik Peserta" />
+        <PerfItem ic="⚠️" val={avgOf((r) => r.issueAlert !== undefined ? r.issueAlert * 100 : null)} nm="Nilai Isu & Peringatan" />
       </div>
       <div className="kpi-row">
-        <Kpi value={totKeg > 0 ? Math.round(totSelesai / totKeg * 100) + "%" : "0%"} label="Progress Keseluruhan" />
-        <Kpi value={rows.filter((r) => r.status === "Upcoming").length} label="Total Upcoming" />
-        <Kpi value={rows.filter((r) => r.status === "On-Going").length} label="Total On-Going" />
+        <Kpi value={totKeg > 0 ? Math.round(totSelesai / totKeg * 100) + "%" : "0%"} label="Kemajuan Keseluruhan" />
+        <Kpi value={rows.filter((r) => r.status === "Upcoming").length} label="Total Akan Datang" />
+        <Kpi value={rows.filter((r) => r.status === "On-Going").length} label="Total Berlangsung" />
         <Kpi value={totSelesai} label="Total Aktivitas Selesai" />
       </div>
 
@@ -75,12 +75,12 @@ export default function Portfolio() {
       </div>
 
       <div className="grid-2 gap">
-        <div className="card"><h3>Top Issues &amp; Alerts</h3><Issues rows={rows} /></div>
-        <div className="card"><h3>Upcoming Milestones</h3><Milestones rows={rows} /></div>
+        <div className="card"><h3>Isu &amp; Peringatan Utama</h3><Issues rows={rows} /></div>
+        <div className="card"><h3>Agenda Mendatang</h3><Milestones rows={rows} /></div>
       </div>
 
       <div className="card">
-        <h3>Timeline Fase Kegiatan</h3>
+        <h3>Linimasa Fase Kegiatan</h3>
         <div className="sub">Rentang tiap fase berdasarkan tanggal kegiatan (ikut filter Program &amp; Bulan)</div>
         <Gantt perProgram items={rawPB
           .map((r) => ({ prog: keyFromStored(r["Program"]), d: parseTgl(r["Tanggal Kegiatan"]), fase: String(r["Fase Kegiatan"] || "").trim() }))
@@ -104,8 +104,8 @@ function PortfolioList({ rows }) {
   const progs = [...new Set(rows.map((r) => r._prog))];
   return (
     <div className="card">
-      <h3>Program Portfolio Performance</h3>
-      <div className="sub">Nilai Performance = rata-rata Nilai Capaian, Kehadiran, Feedback &amp; Keberjalanan (dari Data Masuk)</div>
+      <h3>Kinerja Portofolio Program</h3>
+      <div className="sub">Nilai Kinerja = rata-rata Nilai Capaian, Kehadiran, Umpan Balik &amp; Keberjalanan (dari Data Masuk)</div>
       <div>
         {!progs.length && <div className="empty">Belum ada data.</div>}
         {progs.map((k) => {
@@ -122,7 +122,7 @@ function PortfolioList({ rows }) {
               <div className="cnt">{selesai} / {total}</div>
               <div>
                 <div className="bar"><span style={{ width: Math.min(p, 100) + "%" }} /></div>
-                <div className="pct">{p}% <small style={{ fontWeight: 400, color: "#6B7688" }}>Nilai Performance</small></div>
+                <div className="pct">{p}% <small style={{ fontWeight: 400, color: "#6B7688" }}>Nilai Kinerja</small></div>
               </div>
               <div className={"badge " + cls}>{stat}</div>
             </div>
@@ -257,7 +257,7 @@ function SdmTable({ rows }) {
             <td>{peran}</td><td>{names.length}</td>
             <td style={{ textAlign: "right" }}>
               <button type="button" className="mini-btn sdm-detail" onClick={() => setOpen({ ...open, [peran]: !open[peran] })}>
-                {open[peran] ? "Tutup" : "Detail"}
+                {open[peran] ? "Tutup" : "Rincian"}
               </button>
             </td>
           </tr>,
@@ -376,15 +376,15 @@ function IssueItem({ r }) {
     <div>
       <div className={"issue " + r.level.toLowerCase()}>
         <div className="t">{r.ketisu || r.kegiatan || "-"}<small>{labelOf(r._prog)}</small></div>
-        <button className="mini-btn issue-detail" type="button" onClick={() => setOpen(!open)}>Detail</button>
-        <div className="lv">{r.level}</div>
+        <button className="mini-btn issue-detail" type="button" onClick={() => setOpen(!open)}>Rincian</button>
+        <div className="lv">{idLabel(r.level)}</div>
       </div>
       {open && (
         <div className="issue-info">
           <div><b>PIC:</b> {r.pic || "-"}</div>
-          <div><b>Keterangan Issue:</b> {r.ketisu || "-"}</div>
-          <div><b>Issue dengan pihak (penyelenggara):</b> {r.issuePihak || "-"}</div>
-          <div><b>Problem Solving:</b> {r.issueSolve || "-"}</div>
+          <div><b>Keterangan Isu:</b> {r.ketisu || "-"}</div>
+          <div><b>Isu dengan pihak (penyelenggara):</b> {r.issuePihak || "-"}</div>
+          <div><b>Penyelesaian Masalah:</b> {r.issueSolve || "-"}</div>
         </div>
       )}
     </div>
@@ -394,14 +394,14 @@ function IssueItem({ r }) {
 function Issues({ rows }) {
   const order = { High: 0, Medium: 1, Low: 2 };
   const items = rows.filter((r) => r.level in order).sort((a, b) => order[a.level] - order[b.level]);
-  if (!items.length) return <div className="empty">Tidak ada issue. 🎉</div>;
+  if (!items.length) return <div className="empty">Tidak ada isu. 🎉</div>;
   return <div><SeeMore items={items} render={(r, i) => <IssueItem key={r.id || i} r={r} />} /></div>;
 }
 
 function Milestones({ rows }) {
   const items = rows.filter((r) => (r.jenis || "").trim() && r.tanggal)
     .sort((a, b) => parseTgl(a.tanggal) - parseTgl(b.tanggal));
-  if (!items.length) return <div className="empty">Belum ada milestone.</div>;
+  if (!items.length) return <div className="empty">Belum ada agenda.</div>;
   return (
     <div>
       <SeeMore items={items} render={(r, i) => {
@@ -440,7 +440,7 @@ function Capaian({ programKey, tahun }) {
       a.kat.localeCompare(b.kat) || a.rank.ord - b.rank.ord);
   }, [cap.raw, programKey, tahun, q]);
 
-  let sub = "(dari sheet Capaian_Peserta · ikut filter Program & Tahun di Control)", subErr = false;
+  let sub = "(dari sheet Capaian_Peserta · ikut filter Program & Tahun di panel Filter)", subErr = false;
   if (cap.err) { sub = "⚠️ " + cap.err; subErr = true; }
   else if (cap.raw === null) sub = "⏳ Memuat capaian dari Google Sheets…";
   else if (!cap.raw.length) sub = <>Belum ada data. Buat tab <b>Capaian_Peserta</b> di spreadsheet utama.</>;
