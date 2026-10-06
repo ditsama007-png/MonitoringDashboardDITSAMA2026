@@ -1,92 +1,156 @@
-import { useState } from "react";
-import { data } from "react-router";
-import { ActivitiesTable, useActivityActions } from "../../components/Activities.jsx";
-import { ActivityForm } from "../../components/ActivityForm.jsx";
+import { useMemo } from "react";
+import { data, Link, useFetcher } from "react-router";
 import { Gantt } from "../../components/Gantt.jsx";
-import { Icon } from "../../components/Icon.jsx";
-import { ErrorNote, Kpi, PageHead, ProgramAbout, SkeletonCard, Spinner } from "../../components/ui.jsx";
-import { canEditActivity, fmtDate, fmtNum, phaseLabel, programByKey, PROG_COLORS } from "../../lib/format.js";
-import { PHASES } from "../../config.js";
+import { EmptyRow, Kpi, ProgramAbout, StatusBadge } from "../../components/ui.jsx";
+import { PROGRAMS } from "../../config.js";
+import { apiPost, HAS_API } from "../../lib/api.js";
+import {
+  flexToStd, fmtTanggal, ongoingItems, parseTgl, rowIsProgram, statusOf, upcomingMilestones,
+} from "../../lib/format.js";
 import { useAuthStore } from "../../stores/auth.js";
-import { useApi } from "../../stores/data.js";
+import { useDataStore } from "../../stores/data.js";
 
 export function clientLoader({ params }) {
-  const program = programByKey(params.programKey);
+  const program = PROGRAMS.find((p) => p.key === params.programKey);
   if (!program) throw data(`Program "${params.programKey}" tidak dikenal.`, { status: 404 });
   return { program };
 }
 
-const phaseColor = (ph) => PROG_COLORS[Math.max(0, PHASES.findIndex(([v]) => v === ph)) % PROG_COLORS.length];
+// Tandai Selesai / Hapus kegiatan, lalu muat ulang DataMasuk.
+export async function clientAction({ request }) {
+  const { intent, id } = await request.json();
+  const session = useAuthStore.getState().session;
+  if (!session) return { ok: false, message: "Sesi habis, silakan login ulang." };
+  if (!HAS_API) return { ok: false, message: "Mode contoh — tidak terhubung ke Sheets." };
+  try {
+    const out = intent === "selesai"
+      ? await apiPost({ action: "update_flex", token: session.token, id, record: { "Status Manual": "Selesai" } })
+      : await apiPost({ action: "delete_flex", token: session.token, id });
+    if (!out.ok) {
+      return {
+        ok: false,
+        message: intent === "selesai" ? "Gagal: " + (out.error || "")
+          : "❌ Gagal hapus: " + (out.error || "tidak diketahui") + ". Kemungkinan Code.gs versi lama — pastikan sudah deploy Code.gs terbaru (ada fungsi delete_flex).",
+      };
+    }
+    await useDataStore.getState().loadFlex();
+    return { ok: true, message: intent === "selesai" ? "✅ Kegiatan ditandai selesai." : "✅ Kegiatan berhasil dihapus." };
+  } catch {
+    return { ok: false, message: "❌ Gagal terhubung ke server." };
+  }
+}
 
 export default function ProgramDashboard({ loaderData }) {
   const { program } = loaderData;
-  const { data: res, error, loading, reload } = useApi("/dashboard/activity/program/" + program.api);
-  const d = res?.data;
+  const key = program.key;
+  const flex = useDataStore((s) => s.flex);
+  const rawRows = useMemo(() => flex.rows.filter((r) => rowIsProgram(r, key)), [flex.rows, key]);
+  const rows = useMemo(() => rawRows.map(flexToStd), [rawRows]);
+
+  const total = rows.filter((r) => (r.kegiatan || "").trim()).length;
+  const selesai = rows.filter((r) => (r.kegiatan || "").trim() && r.status === "Selesai").length;
 
   return (
-    <div className="page">
-      <PageHead title={<>{program.fullName}<span className="title-abbr">{program.label}</span></>}>
-        {loading && d && <span className="tb-loading"><Spinner size={14} />Memperbarui…</span>}
-      </PageHead>
-      <ErrorNote error={error} onRetry={() => reload()} />
+    <section id="view-program">
+      <h1 className="title">{program.fullName}<span className="title-abbr">{program.label}</span></h1>
       <ProgramAbout program={program} />
-      {!d ? <><div className="grid g-2"><SkeletonCard /><SkeletonCard /></div></> : (
-        <>
-          <div className="kpi-row">
-            <Kpi label="Kemajuan program" value={d.kpi.progress + "%"} hint={`${fmtNum(d.kpi.totalDone)} dari ${fmtNum(d.kpi.totalActivities)} kegiatan selesai`} icon="trend" />
-            <Kpi label="Berlangsung" value={fmtNum(d.kpi.totalOngoing)} tone="t-ongoing" icon="calendar" />
-            <Kpi label="Akan datang" value={fmtNum(d.kpi.totalUpcoming)} tone="t-upcoming" icon="calendar" />
-            <Kpi label="Selesai" value={fmtNum(d.kpi.totalDone)} tone="t-done" icon="checkCircle" />
-          </div>
-          <div className="grid g-2">
-            <MilestoneCard title="Sedang berlangsung" tone="red" items={d.milestones.ongoing} program={program}
-              empty="Tidak ada kegiatan dalam rentang H-2 sampai H+7." />
-            <MilestoneCard title="Agenda mendatang" tone="yellow" items={d.milestones.upcoming} program={program}
-              empty="Belum ada agenda. Tambahkan lewat Data Kegiatan dengan jenis “Agenda mendatang”." />
-          </div>
-          <section className="card">
-            <div className="card-head"><div><h2 className="card-title">Linimasa fase kegiatan</h2><div className="card-sub">Rentang tanggal tiap fase program ini</div></div></div>
-            <Gantt rows={d.timeline.map((t) => ({
-              key: t.phase, label: phaseLabel(t.phase), color: phaseColor(t.phase), start: t.startDate, end: t.endDate, count: t.activityCount,
-            }))} />
-          </section>
-        </>
+      <div className="kpi-row">
+        <Kpi value={total > 0 ? Math.round(selesai / total * 100) + "%" : "0%"} label="Kemajuan Program" />
+        <Kpi value={rows.filter((r) => r.status === "Upcoming").length} label="Total Akan Datang" />
+        <Kpi value={rows.filter((r) => r.status === "On-Going").length} label="Total Berlangsung" />
+        <Kpi value={selesai} label="Total Selesai" />
+      </div>
+      <ProgramMilestones programKey={key} flexRows={flex.rows} />
+      <div className="card">
+        <h3>Linimasa Fase Kegiatan</h3>
+        <div className="sub">Rentang tiap fase berdasarkan tanggal kegiatan (dari Data Masuk)</div>
+        <Gantt items={rawRows
+          .map((r) => ({ d: parseTgl(r["Tanggal Kegiatan"]), fase: String(r["Fase Kegiatan"] || "").trim() }))
+          .filter((x) => x.fase && x.d)} />
+      </div>
+      <div className="card">
+        <h3>Data Program</h3>
+        <ProgramTable header={flex.header} rows={rawRows} label={program.label} />
+      </div>
+    </section>
+  );
+}
+
+// kartu On-Going & Upcoming Milestone + tombol Isi / Selesai / Hapus
+function ProgramMilestones({ programKey, flexRows }) {
+  const fetcher = useFetcher();
+  const ongoing = ongoingItems(flexRows, programKey);
+  const upcoming = upcomingMilestones(flexRows, programKey);
+  const busyId = fetcher.state !== "idle" ? fetcher.json?.id : null;
+
+  const submit = (intent, id) => {
+    if (intent === "delete") {
+      if (!id) { alert("Baris ini tidak punya ID, tidak bisa dihapus otomatis. Hapus manual di sheet."); return; }
+      if (!confirm("Hapus kegiatan ini secara permanen dari data? Tindakan ini tidak bisa dibatalkan.")) return;
+    }
+    if (!id) return;
+    fetcher.submit({ intent, id }, { method: "post", encType: "application/json" });
+  };
+
+  const row = (r) => {
+    const id = String(r["ID"] || "");
+    return (
+      <div className="ms-row" key={id || r["Nama Kegiatan"]} style={busyId && busyId === id ? { opacity: 0.5 } : undefined}>
+        <div><b>{r["Nama Kegiatan"] || "(tanpa nama)"}</b>
+          <div className="sub">📅 {r["Tanggal Kegiatan"] ? fmtTanggal(r["Tanggal Kegiatan"]) : "(belum ada tanggal)"}</div>
+        </div>
+        <div style={{ whiteSpace: "nowrap" }}>
+          <Link className="mini-btn ok ms-fill" to={`/dashboard/input?program=${programKey}&fill=${encodeURIComponent(id)}`}>✍ Isi data</Link>{" "}
+          <button type="button" className="mini-btn ms-done" style={{ background: "#16A34A", color: "#fff", borderColor: "#16A34A" }}
+            onClick={() => submit("selesai", id)}>✅ Selesai</button>{" "}
+          <button type="button" className="mini-btn ms-del" style={{ background: "#DC2626", color: "#fff", borderColor: "#DC2626" }}
+            onClick={() => submit("delete", id)}>🗑 Hapus</button>
+        </div>
+      </div>
+    );
+  };
+
+  const card = (title, list, color) => list.length > 0 && (
+    <div className="card">
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <h3 style={{ margin: 0 }}>{title}</h3>
+        <span className={"notif-badge " + color}>{list.length}</span>
+      </div>
+      {list.map(row)}
+    </div>
+  );
+
+  return (
+    <div>
+      {fetcher.state === "idle" && fetcher.data && (
+        <div className={"save-msg " + (fetcher.data.ok ? "ok" : "err")} style={{ display: "block", marginBottom: 8 }}>
+          {fetcher.data.message}
+        </div>
       )}
-      <ActivitiesTable fixedProgram={program.api} title={"Kegiatan " + program.label} />
+      {card("Sedang Berlangsung", ongoing, "red")}
+      {card("Agenda Mendatang", upcoming, "yellow")}
     </div>
   );
 }
 
-// daftar kegiatan Berlangsung / Agenda + tombol Isi data / Selesai / Hapus
-function MilestoneCard({ title, tone, items, program, empty }) {
-  const session = useAuthStore((s) => s.session);
-  const can = canEditActivity(session, program.api);
-  const actions = useActivityActions();
-  const [form, setForm] = useState(null);
+// tabel program (read-only) dari DataMasuk
+function ProgramTable({ header, rows, label }) {
+  const cols = (header.length ? header : ["ID", "Waktu Input", "Program", "PIC"]).filter((h) => h !== "Mode");
   return (
-    <section className="card">
-      <div className="card-head">
-        <div className="card-title-row"><h2 className="card-title">{title}</h2><span className={"nav-badge " + tone}>{items.length}</span></div>
-      </div>
-      {!items.length ? <div className="empty-inline">{empty}</div> : (
-        <ul className="ms-list">
-          {items.map((a) => (
-            <li key={a.id} className={actions.busyId === a.id ? "busy" : ""}>
-              <div className="ms-txt"><b>{a.name}</b>
-                <small><Icon name="calendar" size={13} />{a.date ? fmtDate(a.date, { weekday: "short" }) : "Belum dijadwalkan"}{a.phase && " · " + phaseLabel(a.phase)}{a.location && " · " + a.location}</small>
-              </div>
-              {can && (
-                <div className="row-actions">
-                  <button type="button" className="btn btn-sm" onClick={() => setForm(a)}><Icon name="pencil" size={15} />Isi data</button>
-                  <button type="button" className="icon-btn" title="Tandai selesai" aria-label={"Tandai selesai " + a.name} onClick={() => actions.toggleDone(a)}><Icon name="check" size={16} /></button>
-                  <button type="button" className="icon-btn danger" title="Hapus" aria-label={"Hapus " + a.name} onClick={() => actions.remove(a)}><Icon name="trash" size={16} /></button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      <ActivityForm open={!!form} activity={form} defaultProgram={program.api} initialMode="ongoing" onClose={() => setForm(null)} />
-    </section>
+    <div className="table-wrap"><table>
+      <thead><tr><th>Status</th>{cols.map((h) => <th key={h}>{h}</th>)}</tr></thead>
+      <tbody>
+        {!rows.length && <EmptyRow cols={cols.length + 1}>Belum ada data untuk {label}.</EmptyRow>}
+        {rows.map((r, i) => (
+          <tr key={r["ID"] || i}>
+            <td><StatusBadge status={statusOf(r)} /></td>
+            {cols.map((h) => {
+              const v = r[h] ?? "";
+              return <td key={h}>{h === "Tanggal Kegiatan" ? fmtTanggal(v) : String(v)}</td>;
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table></div>
   );
 }

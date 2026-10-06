@@ -1,63 +1,51 @@
 # Dashboard DITSAMA 2026 — React Router (framework mode)
 
 Website monitoring program DITSAMA, dibangun dengan **React Router v8 (framework mode, SPA)**
-dan **Zustand** untuk state bersama. Data diambil dari backend
-**monitoring-dashboard-ditsama-be** (Hono + PostgreSQL), dengan login email & password
-lalu Password Akses tim.
+dan **Zustand** untuk state bersama. Data disimpan ke **Google Sheets** melalui
+**Google Apps Script**, dengan login per pengguna (password dicek di server).
 
 ## Struktur file
 ```
 app/
 ├── root.jsx                 # dokumen HTML + ErrorBoundary global
 ├── routes.js                # daftar route
-├── config.js                # daftar program, jabatan, fase (alamat backend dari .env)
+├── config.js                # URL Apps Script + daftar program  <-- diisi
 ├── routes/
 │   ├── home.jsx             # beranda (/)
 │   └── dashboard/
-│       ├── layout.jsx       # menu, gerbang login, Password Akses, panel Filter
-│       ├── portfolio.jsx    # /dashboard           — Portofolio Program
-│       ├── financial.jsx    # /dashboard/financial — Keuangan
+│       ├── layout.jsx       # menu, gerbang login, Password Akses, panel Control
+│       ├── portfolio.jsx    # /dashboard           — Program Portfolio
+│       ├── financial.jsx    # /dashboard/financial
 │       ├── peserta.jsx      # /dashboard/peserta
 │       ├── dosen.jsx        # /dashboard/dosen
-│       ├── input.jsx        # /dashboard/input     — Data Kegiatan
+│       ├── input.jsx        # /dashboard/input?program=SIAP&edit=<ID>
 │       └── program.jsx      # /dashboard/program/:programKey
-├── stores/                  # zustand: auth (sesi), data (cache data backend), ui (filter/tabel)
-├── lib/                     # api.js (fetch + pesan error), format.js (label, tanggal, akses)
-├── components/              # tabel kegiatan & keuangan, form, Chart.js, Gantt, Kalender, dll.
+├── stores/                  # zustand: auth (sesi), data (Sheets), ui (filter/tab)
+├── lib/                     # helper murni: format, parser peserta/dosen/capaian, API
+├── components/              # Chart.js, Gantt, Kalender, gerbang login, dll.
 └── styles/                  # dashboard.css, home.css
 public/assets/dpb-logo.png
 ```
 
 ## Menjalankan di komputer
-Butuh Node.js 22.22+ dan backend yang sudah berjalan (lihat README backend).
-1. Buat file `.env` di folder ini:
-   ```
-   VITE_API_URL=http://localhost:3000/api
-   ```
-2. Pastikan `CORS_ORIGINS` di `.env` backend berisi `http://localhost:5173`.
-3. Jalankan:
-   ```bash
-   npm install
-   npm run dev
-   ```
+Butuh Node.js 22.22+.
+```bash
+npm install
+npm run dev
+```
 Buka `http://localhost:5173/MonitoringDashboardDITSAMA2026/`.
 
-## Fitur data
-- **Data Kegiatan**: cari (nama, PIC, lokasi), urutkan, halaman, filter program, tambah/ubah lewat
-  panel samping, tandai selesai, hapus satu atau banyak sekaligus, impor & ekspor Excel.
-- **Keuangan**: filter program/tahun/bulan/jenis pengajuan, tabel transaksi PKS & pengajuan dengan
-  pencarian, urutan, halaman, ubah, hapus massal, impor & ekspor Excel.
-- File impor memakai format yang sama dengan file hasil **Ekspor**.
-- Hak ubah mengikuti jabatan: PIC hanya program miliknya, Finance hanya Keuangan,
-  Admin & Kasubdit semuanya.
+## Setup Google Sheets (backend)
+1. Buka Google Sheets → **Extensions → Apps Script**, tempel `Code.gs`.
+2. Atur `SPREADSHEET_ID` dan daftar akses PIC di bagian atas `Code.gs`.
+3. **Deploy → New deployment → Web app** (Execute as: Me, Who has access: Anyone).
+4. Salin Web app URL ke `API_URL` di `app/config.js`.
+   Selama `API_URL` kosong (`""`), website jalan dalam **mode contoh** (akun disimpan di browser).
 
 ## Publikasi di GitHub Pages
 Workflow `.github/workflows/deploy.yml` otomatis build & deploy setiap push ke `main`.
 1. Repo → **Settings → Pages** → Source: **GitHub Actions**.
-2. Repo → **Settings → Secrets and variables → Actions → Variables** → buat `VITE_API_URL`
-   berisi alamat backend produksi (termasuk `/api`).
-3. Tambahkan alamat GitHub Pages ke `CORS_ORIGINS` di backend.
-4. Push ke `main`; website tersedia di `https://<user>.github.io/MonitoringDashboardDITSAMA2026/`.
+2. Push ke `main`; website tersedia di `https://<user>.github.io/MonitoringDashboardDITSAMA2026/`.
 
 Jika nama repo berubah, sesuaikan `basename` di `react-router.config.js` **dan** `base`
 di `vite.config.js`.
@@ -66,5 +54,5 @@ di `vite.config.js`.
 `/dashboard/financial` tetap bisa dibuka langsung di GitHub Pages).
 
 ## Catatan keamanan
-- Password dan Password Akses diperiksa di backend; website hanya menyimpan token di memori.
+- Cocok untuk tool internal. Password diperiksa di Apps Script (server Google), bukan di website.
 - Sesi login tidak disimpan: pengguna wajib login setiap membuka website.
