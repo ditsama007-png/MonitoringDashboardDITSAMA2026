@@ -681,9 +681,13 @@ dialog.confirm[open]{animation:pop .2s var(--ease)}
   .cal-dots{display:flex}
   .cal-grid{gap:4px}
   .name-list{columns:1}
-  .port li{grid-template-columns:10px minmax(0,1fr) auto;row-gap:6px}
-  .port-cnt{display:none}
-  .port-score{grid-column:2 / 4}
+  /* baris 1: titik · nama/PIC · status — baris 2: skor · jumlah kegiatan */
+  .port li{grid-template-columns:10px minmax(0,1fr) 112px;column-gap:10px;row-gap:8px;padding:12px 0}
+  .port li .port-dot{grid-column:1;grid-row:1;align-self:start;margin-top:5px}
+  .port-nm{grid-column:2;grid-row:1}
+  .port li .pill{grid-column:3;grid-row:1;align-self:start;justify-self:end}
+  .port-score{grid-column:2;grid-row:2}
+  .port-cnt{grid-column:3;grid-row:2;font-size:12.5px}
   .perf li{grid-template-columns:30px minmax(0,1fr) 46px}
   .perf li .meter{grid-column:2 / 4;grid-row:2}
   .perf-val{grid-row:1;grid-column:3}
