@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { ChartCanvas } from "../../components/ChartCanvas.jsx";
 import { FinanceTable } from "../../components/Finance.jsx";
+import { RequireAccess } from "../../components/Access.jsx";
 import { Icon } from "../../components/Icon.jsx";
 import { Bar, ErrorNote, Kpi, PageHead, SelectField, SkeletonCard, Spinner } from "../../components/ui.jsx";
 import { FIN_PROGRAMS } from "../../config.js";
@@ -12,6 +13,10 @@ const monthName = (ym) => { const [y, m] = ym.split("-"); return MONTHS[Number(m
 const jt = (v) => Math.round((Number(v) || 0) / 1e5) / 10;   // juta, 1 desimal
 
 export default function Financial() {
+  return <RequireAccess area="finance" page="Keuangan"><FinancialPage /></RequireAccess>;
+}
+
+function FinancialPage() {
   const ui = useUiStore((s) => s.fin);
   const patch = useUiStore((s) => s.patch);
   const update = (v) => patch("fin", v);

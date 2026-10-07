@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChartCanvas } from "../../components/ChartCanvas.jsx";
+import { RequireAccess } from "../../components/Access.jsx";
 import { Icon } from "../../components/Icon.jsx";
 import {
   Bar, EmptyState, ErrorNote, Kpi, PageHead, SearchInput, SelectField, Sheet, SkeletonCard, Spinner,
@@ -17,6 +18,10 @@ const score = (v) => (v == null ? "–" : Number(v).toLocaleString("id-ID", { mi
 const nice = (n) => String(n || "").split(",")[0].replace(/^((prof|dr|drs|dra|ir)\.?\s+)+/i, "").trim();
 
 export default function Dosen() {
+  return <RequireAccess area="activities" page="Portofolio Dosen"><DosenPage /></RequireAccess>;
+}
+
+function DosenPage() {
   const ui = useUiStore((s) => s.dsn);
   const patch = useUiStore((s) => s.patch);
   const filters = { ...withoutAll(Object.fromEntries(FILTERS.map(([k]) => [k, ui[k]]))), ...(ui.minResp !== "1" ? { minResp: ui.minResp } : {}) };

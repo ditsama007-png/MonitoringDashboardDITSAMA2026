@@ -48,8 +48,13 @@ Buka `http://localhost:5173/MonitoringDashboardDITSAMA2026/`.
 - **Keuangan**: filter program/tahun/bulan/jenis pengajuan, tabel transaksi PKS & pengajuan dengan
   pencarian, urutan, halaman, ubah, hapus massal, impor & ekspor Excel.
 - File impor memakai format yang sama dengan file hasil **Ekspor**.
-- Hak ubah mengikuti jabatan: PIC hanya program miliknya, Finance hanya Keuangan,
-  Admin & Kasubdit semuanya.
+- Hak akses mengikuti jabatan (sama dengan backend):
+  - Admin & Kasubdit: semua menu, boleh mengubah semua data.
+  - PIC: semua menu kecuali Keuangan; hanya boleh mengubah kegiatan program miliknya.
+  - Finance: hanya Keuangan.
+  Menu yang tidak bisa dibuka tetap tampil tetapi nonaktif.
+- Impor Keuangan membaca semua tab sheet yang punya kolom `Nilai PKS` atau `Nilai Pengajuan`;
+  program diambil dari kolom Program atau nama tab (mis. `SIAP_2026`).
 
 ## Publikasi di GitHub Pages
 Workflow `.github/workflows/deploy.yml` otomatis build & deploy setiap push ke `main`.

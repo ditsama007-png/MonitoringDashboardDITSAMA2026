@@ -85,8 +85,8 @@ export function FinanceTable({ filters, ui, update }) {
         <div className="tbl-actions">
           {canEdit && (
             <ImportButton path={"/financial/import" + (singleProgram ? "/" + singleProgram : "")}
-              hint="Unggah .xlsx/.csv dengan format yang sama seperti file Ekspor"
-              describe={(d) => `${d.importedCount ?? 0} transaksi diimpor.`} onDone={refreshFinance} />
+              hint="Unggah .xlsx/.csv. Semua tab sheet yang punya kolom Nilai PKS atau Nilai Pengajuan ikut diimpor; program dibaca dari kolom Program atau nama tab (mis. SIAP_2026)"
+              describe={(d) => `${d.importedCount ?? 0} transaksi diimpor dari semua tab program.`} onDone={refreshFinance} />
           )}
           <ExportButton path={exportPath} filename="keuangan.xlsx"
             query={{ ...filters, search: ui.search, sortBy, sortOrder }} />

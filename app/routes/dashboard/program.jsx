@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { data } from "react-router";
+import { RequireAccess } from "../../components/Access.jsx";
 import { ActivitiesTable, useActivityActions } from "../../components/Activities.jsx";
 import { ActivityForm } from "../../components/ActivityForm.jsx";
 import { Gantt } from "../../components/Gantt.jsx";
@@ -19,6 +20,10 @@ export function clientLoader({ params }) {
 const phaseColor = (ph) => PROG_COLORS[Math.max(0, PHASES.findIndex(([v]) => v === ph)) % PROG_COLORS.length];
 
 export default function ProgramDashboard({ loaderData }) {
+  return <RequireAccess area="activities" page="Dashboard program"><ProgramPage loaderData={loaderData} /></RequireAccess>;
+}
+
+function ProgramPage({ loaderData }) {
   const { program } = loaderData;
   const { data: res, error, loading, reload } = useApi("/dashboard/activity/program/" + program.api);
   const d = res?.data;

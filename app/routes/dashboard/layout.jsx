@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useMatches } from "react-router";
 import { useShallow } from "zustand/react/shallow";
-import { AccessOverlay, AuthGate } from "../../components/AuthGate.jsx";
 import { FeedbackHost } from "../../components/feedback.jsx";
 import { Icon } from "../../components/Icon.jsx";
 import { SelectField, Sheet, Spinner } from "../../components/ui.jsx";
 import { PROGRAMS, SUGT_URL } from "../../config.js";
-import { isAllAccess, isFinanceOnly, levelLabel, programByApi, progColor, roleLabel, withoutAll } from "../../lib/format.js";
+import { ACCESS } from "../../components/Access.jsx";
+import { AccessOverlay, AuthGate } from "../../components/AuthGate.jsx";
+import { isAllAccess, levelLabel, programByApi, progColor, roleLabel, withoutAll } from "../../lib/format.js";
 import { useAuthStore } from "../../stores/auth.js";
 import { useApi } from "../../stores/data.js";
 import { useUiStore } from "../../stores/ui.js";
@@ -21,6 +22,20 @@ export function meta() {
 }
 
 const navClass = ({ isActive }) => "nav-item" + (isActive ? " active" : "");
+
+// tautan menu; untuk jabatan tanpa akses tetap tampil tapi nonaktif
+function NavItem({ session, area, to, end, children }) {
+  const rule = area && ACCESS[area];
+  if (rule && !rule.can(session)) {
+    const why = `Hanya untuk ${rule.who}`;
+    return (
+      <span className="nav-item disabled" role="link" aria-disabled="true" title={why}>
+        {children}<Icon name="lock" size={14} className="nav-lock" /><span className="sr-only">({why})</span>
+      </span>
+    );
+  }
+  return <NavLink className={navClass} to={to} end={end}>{children}</NavLink>;
+}
 
 export default function DashboardLayout() {
   const session = useAuthStore((s) => s.session);
@@ -42,7 +57,8 @@ function Shell({ session }) {
   useEffect(() => { ui.set({ railOpen: false, controlOpen: false }); }, [location.pathname]);
 
   // badge jumlah Berlangsung (merah) & Akan Datang (kuning) per program dari kalender dashboard utama
-  const { data } = useApi("/dashboard", {});
+  const canActivities = ACCESS.activities.can(session);
+  const { data } = useApi("/dashboard", {}, { enabled: canActivities });
   const badges = useMemo(() => {
     const out = {};
     (data?.data?.calendar || []).forEach((e) => {
@@ -52,8 +68,6 @@ function Shell({ session }) {
     });
     return out;
   }, [data]);
-
-  const finance = isFinanceOnly(session);
 
   return (
     <div className={"app" + (ui.railHidden ? " rail-hidden" : "")}>
@@ -67,21 +81,21 @@ function Shell({ session }) {
           <button className="icon-btn on-dark rail-close" type="button" onClick={() => ui.set({ railOpen: false })} aria-label="Tutup menu"><Icon name="x" size={18} /></button>
         </div>
         <nav className="rail-nav">
-          <NavLink className={navClass} to="/dashboard" end><Icon name="grid" />Portofolio Program</NavLink>
-          <NavLink className={navClass} to="/dashboard/financial"><Icon name="wallet" />Keuangan</NavLink>
-          <NavLink className={navClass} to="/dashboard/peserta"><Icon name="users" />Peserta</NavLink>
-          <NavLink className={navClass} to="/dashboard/dosen"><Icon name="grad" />Portofolio Dosen</NavLink>
-          {!finance && <NavLink className={navClass} to="/dashboard/input"><Icon name="clipboard" />Data Kegiatan</NavLink>}
+          <NavItem session={session} area="activities" to="/dashboard" end><Icon name="grid" />Portofolio Program</NavItem>
+          <NavItem session={session} area="finance" to="/dashboard/financial"><Icon name="wallet" />Keuangan</NavItem>
+          <NavItem session={session} area="activities" to="/dashboard/peserta"><Icon name="users" />Peserta</NavItem>
+          <NavItem session={session} area="activities" to="/dashboard/dosen"><Icon name="grad" />Portofolio Dosen</NavItem>
+          <NavItem session={session} area="activities" to="/dashboard/input"><Icon name="clipboard" />Data Kegiatan</NavItem>
           <div className="nav-label">Dashboard program</div>
           {PROGRAMS.map((p) => {
             const b = badges[p.api];
             return (
-              <NavLink key={p.key} className={navClass} to={`/dashboard/program/${p.key}`}>
+              <NavItem key={p.key} session={session} area="activities" to={`/dashboard/program/${p.key}`}>
                 <span className="nav-dot" style={{ background: progColor(p.api) }} aria-hidden="true" />
                 <span className="nav-txt">{p.label}</span>
                 {b?.on > 0 && <span className="nav-badge red" title={`${b.on} kegiatan berlangsung`}>{b.on}</span>}
                 {b?.up > 0 && <span className="nav-badge yellow" title={`${b.up} kegiatan akan datang`}>{b.up}</span>}
-              </NavLink>
+              </NavItem>
             );
           })}
           <a className="nav-item" href={SUGT_URL} target="_blank" rel="noopener"><Icon name="external" />Program SUGT</a>
@@ -94,7 +108,7 @@ function Shell({ session }) {
       </aside>
       <div className="scrim" hidden={!ui.railOpen && !ui.controlOpen} onClick={() => ui.set({ railOpen: false, controlOpen: false })} />
 
-      {withControl && <ControlPanel open={ui.controlOpen} hidden={ui.controlHidden} />}
+      {withControl && canActivities && <ControlPanel open={ui.controlOpen} hidden={ui.controlHidden} />}
 
       <main className="stage" id="main">
         <div className="topbar">
@@ -103,7 +117,7 @@ function Shell({ session }) {
             aria-label={ui.railHidden ? "Tampilkan menu" : "Sembunyikan menu"} title={ui.railHidden ? "Tampilkan menu" : "Sembunyikan menu"}>
             <Icon name="menu" size={20} />
           </button>
-          {withControl && (
+          {withControl && canActivities && (
             <button className="btn btn-sm topbar-filter" type="button"
               onClick={() => (window.matchMedia("(max-width: 1100px)").matches ? ui.set({ controlOpen: true }) : ui.set({ controlHidden: !ui.controlHidden }))}>
               <Icon name="filter" size={16} />Filter
@@ -122,7 +136,7 @@ function Shell({ session }) {
 function ProfileSheet({ open, onClose }) {
   const session = useAuthStore((s) => s.session);
   const logout = useAuthStore((s) => s.logout);
-  const progs = isAllAccess(session) ? "Semua program"
+  const progs = isAllAccess(session) ? "Semua program" : session.role === "finance" ? "Hanya Keuangan"
     : (session.programs || []).map((p) => programByApi(p)?.label || p).join(", ") || "–";
   return (
     <Sheet open={open} onClose={onClose} title="Profil" footer={(
@@ -135,7 +149,7 @@ function ProfileSheet({ open, onClose }) {
       <dl className="facts">
         <div><dt>Jabatan</dt><dd>{roleLabel(session.role)}</dd></div>
         <div><dt>Akses program</dt><dd>{progs}</dd></div>
-        <div><dt>Hak ubah</dt><dd>{session.role === "finance" ? "Menu Keuangan" : session.role === "pic" ? "Data kegiatan program Anda" : "Semua data kegiatan & keuangan"}</dd></div>
+        <div><dt>Hak ubah</dt><dd>{session.role === "finance" ? "Data keuangan" : session.role === "pic" ? "Data kegiatan program Anda (Keuangan tidak tersedia)" : "Semua data kegiatan & keuangan"}</dd></div>
       </dl>
     </Sheet>
   );

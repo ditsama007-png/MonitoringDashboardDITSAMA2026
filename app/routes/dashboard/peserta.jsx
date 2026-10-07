@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChartCanvas } from "../../components/ChartCanvas.jsx";
+import { RequireAccess } from "../../components/Access.jsx";
 import { Icon } from "../../components/Icon.jsx";
 import {
   Bar, EmptyState, ErrorNote, Kpi, PageHead, Pagination, SearchInput, Segmented, SelectField, Sheet, SkeletonCard, Spinner,
@@ -23,6 +24,10 @@ function IdxChip({ ix }) {
 }
 
 export default function Peserta() {
+  return <RequireAccess area="activities" page="Peserta"><PesertaPage /></RequireAccess>;
+}
+
+function PesertaPage() {
   const ui = useUiStore((s) => s.pst);
   const patch = useUiStore((s) => s.patch);
   const base = withoutAll(Object.fromEntries(FILTERS.map(([k]) => [k, ui[k]])));

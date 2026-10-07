@@ -33,7 +33,7 @@ const MESSAGES = {
   "Failed to upload SK.": "Gagal mengunggah SK. Coba lagi.",
   "Invalid Excel file format.": "Format file tidak dikenali. Gunakan .xlsx atau .csv.",
   "Excel workbook contains no sheets.": "File tidak berisi sheet apa pun.",
-  "Uploaded sheet contains no data.": "Sheet pertama di file kosong.",
+  "Uploaded sheet contains no data.": "Tidak ada data yang bisa diimpor dari file ini. Pastikan kolomnya sama dengan file hasil Ekspor.",
   "A file field containing the spreadsheet is required.": "Pilih file spreadsheet dulu.",
   "Lecturer not found.": "Dosen tidak ditemukan untuk filter ini.",
   "Something went wrong": "Terjadi kesalahan di server. Coba lagi sebentar lagi.",

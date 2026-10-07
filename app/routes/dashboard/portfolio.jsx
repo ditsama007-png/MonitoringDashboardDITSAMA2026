@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Navigate } from "react-router";
 import { Calendar } from "../../components/Calendar.jsx";
 import { ChartCanvas } from "../../components/ChartCanvas.jsx";
 import { Gantt } from "../../components/Gantt.jsx";
@@ -7,7 +8,8 @@ import {
   Bar, EmptyState, ErrorNote, Kpi, LevelBadge, PageHead, ProgramAbout, SeeMore, Sheet, SkeletonCard,
 } from "../../components/ui.jsx";
 import { PROGRAMS } from "../../config.js";
-import { fmtDate, fmtNum, phaseLabel, progColor, withoutAll } from "../../lib/format.js";
+import { canSeeActivities, fmtDate, fmtNum, phaseLabel, progColor, withoutAll } from "../../lib/format.js";
+import { useAuthStore } from "../../stores/auth.js";
 import { useApi } from "../../stores/data.js";
 import { useUiStore } from "../../stores/ui.js";
 
@@ -17,6 +19,12 @@ export const handle = { control: true };
 const STATUS = { "On Track": ["Sesuai target", "ok"], Attention: ["Perlu perhatian", "warn"], Critical: ["Kritis", "crit"] };
 
 export default function Portfolio() {
+  // halaman awal dashboard; Finance langsung diarahkan ke Keuangan
+  const session = useAuthStore((s) => s.session);
+  return canSeeActivities(session) ? <PortfolioPage /> : <Navigate to="/dashboard/financial" replace />;
+}
+
+function PortfolioPage() {
   const dash = useUiStore((s) => s.dash);
   const { data, error, loading, reload } = useApi("/dashboard", withoutAll(dash));
   const d = data?.data;

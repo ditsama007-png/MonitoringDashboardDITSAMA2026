@@ -104,42 +104,59 @@ export function attendance(participants) {
 export const skName = (name) => String(name || "").replace(/^\d{10,}-/, "");
 
 // ---------------------------------------------------------------- akses ---
-export const isAllAccess = (s) => !!s && ["admin", "kasubdit", "finance"].includes(s.role);
-export const isFinanceOnly = (s) => s?.role === "finance";
+// mengikuti hak akses backend: Finance hanya Keuangan, PIC tidak bisa membuka Keuangan
+export const isAllAccess = (s) => !!s && ["admin", "kasubdit"].includes(s.role);
+export const canSeeActivities = (s) => !!s && ["admin", "kasubdit", "pic"].includes(s.role);
 export const canEditFinance = (s) => !!s && ["admin", "kasubdit", "finance"].includes(s.role);
-// program kegiatan yang boleh diisi/diubah (Finance tidak boleh mengisi data kegiatan)
+// program kegiatan yang boleh diisi/diubah
 export function editablePrograms(s) {
-  if (!s || s.role === "finance") return [];
+  if (!canSeeActivities(s)) return [];
   if (s.role === "pic") return PROGRAMS.filter((p) => (s.programs || []).includes(p.api));
   return PROGRAMS;
 }
 export const canEditActivity = (s, programApi) => editablePrograms(s).some((p) => p.api === programApi);
 
 // ------------------------------------------------------------ nama orang ---
-// Gelar akademik (dengan atau tanpa titik): "S.T." "ST" "MSM" "M.Sc." "PhD" "Ph.D." "S.Kom" dst.
+// Sama dengan pemisah nama SDM di backend (impor kegiatan) agar jumlah orang konsisten.
 const GELAR_TANPA_TITIK = new Set(["st", "mt", "msm", "msc", "ms", "mm", "mba", "phd", "se", "sh", "mh", "skom", "mkom",
   "spd", "mpd", "ssi", "msi", "sag", "mag", "ssos", "msos", "sp", "spsi", "mpsi", "apt", "sked", "ak", "sip", "mip",
   "sikom", "mikom", "sds", "mds", "sars", "mars", "eng", "dea", "dipl", "bsc", "ba", "ma", "mphil", "med", "meng",
   "amd", "cfa", "cpa", "ca", "stp", "mtp", "ssn", "msn", "shum", "mhum", "sfarm", "mfarm", "drs", "dra", "ir", "dr", "prof"]);
-function isGelarAkademik(t) {
-  const s = String(t || "").trim();
-  if (!s || /\s/.test(s) || s.length > 8) return false;           // gelar = satu kata pendek
+// gelar depan: "Dr.Ir" bukan gelar belakang walau bertitik
+const GELAR_DEPAN = new Set(["dr", "drs", "dra", "prof", "ir", "h", "hj", "apt"]);
+const rapikanGelar = (t) => t.replace(/\s*\.\s*/g, ".").trim();
+function isGelarAkademik(t, setelahGelar) {
+  const s = rapikanGelar(t);
+  if (!s || /\s/.test(s)) return false;
   if (GELAR_TANPA_TITIK.has(s.replace(/\./g, "").toLowerCase())) return true;
-  return /\./.test(s);                                           // bentuk bertitik lain, mis. "S.Kel."
+  if (/^[A-Z]{2,4}$/.test(s)) return setelahGelar;              // "MSE" hanya gelar bila menyusul gelar lain
+  const seg = s.split(".").filter(Boolean);
+  return seg.length > 1 && !GELAR_DEPAN.has(seg[0].toLowerCase()) && seg.every((x) => /^[A-Za-z]{1,3}$/.test(x));
 }
 // Pisah daftar orang: utamakan baris/;, lalu koma — TAPI gabungkan gelar (S.Si, M.T, Ph.D, dst)
 export function splitPeople(text) {
   const out = [];
-  String(text || "").split(/[\n;]+/).forEach((line) => {
-    let cur = "";
-    line.split(",").forEach((part) => {
-      const t = part.trim();
-      if (!t) return;
-      if (isGelarAkademik(t) && cur) cur += ", " + t;
-      else { if (cur) out.push(cur); cur = t; }
+  let setelahGelar = false;
+  String(text || "")
+    .replace(/([a-z]{3,})([A-Z][a-z])/g, "$1\n$2")               // nama tempel tanpa pemisah: "BudiSari"
+    .split(/[\n;]+/)
+    .forEach((line) => {
+      let cur = "";
+      line.split(",").forEach((part) => {
+        const t = part.trim();
+        if (!t) return;
+        if (isGelarAkademik(t, setelahGelar) && (cur || out.length)) {
+          if (cur) cur += ", " + rapikanGelar(t);
+          else out[out.length - 1] += ", " + rapikanGelar(t);
+          setelahGelar = true;
+        } else {
+          if (cur) out.push(cur);
+          cur = t;
+          setelahGelar = false;
+        }
+      });
+      if (cur) out.push(cur);
     });
-    if (cur) out.push(cur);
-  });
   return out;
 }
 export const initials = (name) => String(name || "").replace(/^(prof|dr|drs|dra|ir)\.?\s+/gi, "").split(/[\s,]+/)
