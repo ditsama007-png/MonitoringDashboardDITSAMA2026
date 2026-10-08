@@ -1,331 +1,258 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ChartCanvas } from "../../components/ChartCanvas.jsx";
-import { Kpi, SelectField } from "../../components/ui.jsx";
-import { keepOption, uniqSorted } from "../../lib/format.js";
+import { RequireAccess } from "../../components/Access.jsx";
+import { Icon } from "../../components/Icon.jsx";
 import {
-  PST_FILTERS, PST_IDX_LOW, PST_IDX_ORDER, pstExamLabel, pstFmt, pstParse, pstStats,
-} from "../../lib/peserta.js";
-import { useAuthStore } from "../../stores/auth.js";
-import { useDataStore } from "../../stores/data.js";
+  Bar, EmptyState, ErrorNote, Kpi, PageHead, Pagination, SearchInput, Segmented, SelectField, Sheet, SkeletonCard, Spinner,
+} from "../../components/ui.jsx";
+import { fmtNum, withoutAll } from "../../lib/format.js";
+import { useApi } from "../../stores/data.js";
 import { useUiStore } from "../../stores/ui.js";
 
 const ALL = "Semua";
 const NAVY = "#204074", BLUE = "#3a6db0", ORANGE = "#E08A2E";
+const FILTERS = [
+  ["program", "programs", "Program"], ["periode", "periodes", "Periode"], ["aktivitas", "aktivitas", "Aktivitas"],
+  ["provinsi", "provinsis", "Provinsi"], ["fakultas", "fakultas", "Fakultas / jurusan"], ["skema", "skemas", "Skema"],
+  ["tipe", "tipes", "Tipe"], ["kelompok", "kelompoks", "Kelompok"],
+];
+const SORTS = [["ujian", "Nilai ujian terpilih"], ["rata", "Rata-rata semua ujian"], ["naik", "Kenaikan tertinggi"]];
+const LOW = { C: 1, D: 1, E: 1 };
 
 function IdxChip({ ix }) {
-  return ix ? <span className={"idx-chip" + (PST_IDX_LOW[ix] ? " low" : "")}>{ix}</span> : <span className="nil-muted">–</span>;
+  return ix ? <span className={"idx-chip" + (LOW[ix] ? " low" : "")}>{ix}</span> : null;
 }
 
 export default function Peserta() {
-  const { raw, err } = useDataStore((s) => s.peserta);
-  const loadPeserta = useDataStore((s) => s.loadPeserta);
-  const session = useAuthStore((s) => s.session);
+  return <RequireAccess area="activities" page="Peserta"><PesertaPage /></RequireAccess>;
+}
+
+function PesertaPage() {
   const ui = useUiStore((s) => s.pst);
   const patch = useUiStore((s) => s.patch);
-  const [loading, setLoading] = useState(false);
-
-  const reload = async () => { setLoading(true); await loadPeserta(); setLoading(false); };
-  // muat sekali setelah login (data peserta butuh token)
-  useEffect(() => { if (raw === null && session) reload(); }, [raw, session]);
-
-  const { people, examKeys } = useMemo(() => pstParse(raw), [raw]);
-
-  // filter bertingkat: opsi tiap filter dihitung dari data yang lolos filter lain (kecuali dirinya)
-  const { opts, values, rows } = useMemo(() => {
-    const opts = {}, values = {};
-    PST_FILTERS.forEach(([key, field]) => {
-      const others = people.filter((p) => PST_FILTERS.every(([k2, f2]) => k2 === key || ui[k2] === ALL || p[f2] === ui[k2]));
-      opts[key] = [ALL, ...uniqSorted(others.map((p) => p[field]))];
-      values[key] = keepOption(opts[key], ui[key]);
-    });
-    const rows = people.filter((p) => PST_FILTERS.every(([k, f]) => values[k] === ALL || p[f] === values[k]));
-    return { opts, values, rows };
-  }, [people, ui]);
-
-  // ujian yang dipakai (terbaru yg ada nilainya di data terfilter, atau pilihan user)
-  const ujianOpts = [["__LAST__", "Terbaru (yang sudah ada nilai)"], ...examKeys.slice().reverse().map((k) => [k, pstExamLabel(k)])];
-  const ujianSel = ujianOpts.some(([v]) => v === ui.ujian) ? ui.ujian : "__LAST__";
-  const withData = examKeys.filter((k) => rows.some((p) => p.n[k] && p.n[k].v !== null));
-  const uj = ujianSel !== "__LAST__" ? ujianSel : (withData.length ? withData[withData.length - 1] : (examKeys[examKeys.length - 1] || ""));
-  const ujLabel = uj ? pstExamLabel(uj) : "–";
-
-  const setFilter = (key, v) => patch("pst", { [key]: v, listN: 50 });
-
-  let msg = null, msgErr = false;
-  if (loading && !raw) msg = "⏳ Memuat data peserta…";
-  else if (err) { msg = "⚠️ " + err; msgErr = true; }
-  else if (!raw || !raw.length) {
-    msg = <>Belum ada data. Buat tab di Google Sheets dengan nama diawali <b>Peserta</b> (mis. <b>Peserta_SIAP</b>),
-      header baris 1: PIC, Program, Periode, Aktivitas, Nama Peserta, Provinsi, Nama Sekolah, Fakultas/Jurusan, Skema, Tipe, Kelompok Peserta,
-      lalu kolom ujian <b>Nilai Akhir_dd_mm_yyyy</b> dan <b>Indeks_dd_mm_yyyy</b>.</>;
-  } else {
-    msg = `${people.length} peserta dari ${raw.length} tab · ${examKeys.length} tanggal ujian terbaca: ` +
-      (examKeys.map(pstExamLabel).join(", ") || "belum ada kolom ujian");
-  }
-
-  const nilaiUj = rows.map((p) => (p.n[uj] && p.n[uj].v !== null) ? p.n[uj].v : null).filter((v) => v !== null);
-  const avgUj = nilaiUj.length ? nilaiUj.reduce((a, b) => a + b, 0) / nilaiUj.length : null;
+  const base = withoutAll(Object.fromEntries(FILTERS.map(([k]) => [k, ui[k]])));
+  const query = { ...base, ...(ui.ujian !== "__LAST__" ? { ujian: ui.ujian } : {}) };
+  const dash = useApi("/dashboard/peserta", { ...query, ...(ui.rankingSortBy !== "ujian" ? { rankingSortBy: ui.rankingSortBy } : {}) });
+  const d = dash.data?.data;
+  const fo = d?.filterOptions;
+  const setFilter = (k, v) => patch("pst", { [k]: v, page: 1 });
+  const active = FILTERS.some(([k]) => ui[k] !== ALL) || ui.ujian !== "__LAST__";
+  const [busy, setBusy] = useState(false);
+  const refresh = async () => { setBusy(true); await dash.reload({ refresh: true }); setBusy(false); };
 
   return (
-    <section id="view-peserta">
-      <h1 className="title" style={{ visibility: "visible" }}>Dashboard Peserta</h1>
+    <div className="page">
+      <PageHead title="Peserta" sub="Data peserta, nilai ujian, dan sebaran sekolah dari Google Sheets">
+        <button type="button" className="btn" onClick={refresh} disabled={busy || dash.loading}>
+          {busy ? <Spinner /> : <Icon name="refresh" size={16} />}<span className="btn-txt">Muat ulang dari Sheets</span>
+        </button>
+      </PageHead>
 
-      <div className="card">
-        <div className="pst-filters">
-          {PST_FILTERS.map(([key, , label]) => (
-            <SelectField key={key} label={label} value={values[key]} options={opts[key]} onChange={(v) => setFilter(key, v)} />
-          ))}
-          <SelectField label="Ujian" value={ujianSel} options={ujianOpts} onChange={(v) => setFilter("ujian", v)} />
-          <button className="btn-ghost" type="button" onClick={reload}>{loading ? "⏳ Memuat..." : "🔄 Muat Ulang"}</button>
-        </div>
-        <div className="sub" style={{ margin: ".4rem 0 0", color: msgErr ? "var(--red)" : undefined }}>{msg}</div>
-      </div>
+      <section className="card filter-bar">
+        {FILTERS.map(([k, optKey, label]) => {
+          const list = fo?.[optKey] || [];
+          return <SelectField key={k} label={label} value={list.includes(ui[k]) ? ui[k] : ALL} options={[ALL, ...list]} onChange={(v) => setFilter(k, v)} />;
+        })}
+        <SelectField label="Ujian" value={ui.ujian} onChange={(v) => setFilter("ujian", v)}
+          options={[["__LAST__", "Terbaru yang sudah dinilai"], ...[...(fo?.ujians || [])].reverse().map((u) => [u.key, u.label])]} />
+        {active && <button type="button" className="btn btn-sm filter-reset"
+          onClick={() => patch("pst", { ...Object.fromEntries(FILTERS.map(([k]) => [k, ALL])), ujian: "__LAST__", page: 1 })}>Reset filter</button>}
+      </section>
 
-      <div className="kpi-row">
-        <Kpi value={rows.length.toLocaleString("id-ID")} label="Total Peserta" />
-        <Kpi value={uniqSorted(rows.map((p) => p.prov)).length} label="Provinsi" />
-        <Kpi value={uniqSorted(rows.map((p) => p.sek)).length} label="Sekolah / Instansi" />
-        <Kpi value={withData.length + (examKeys.length > withData.length ? " / " + examKeys.length : "")} label="Jumlah Ujian" />
-        <Kpi value={avgUj === null ? "–" : avgUj.toFixed(1)} label={"Rata-rata Nilai · " + ujLabel} />
-        <Kpi value={rows.length ? nilaiUj.length + " / " + rows.length : "–"} label="Sudah Dinilai" />
-      </div>
+      <ErrorNote error={dash.error} onRetry={() => dash.reload()} />
 
-      <PesertaCharts rows={rows} examKeys={examKeys} uj={uj} ujLabel={ujLabel} />
-      <Sekolah rows={rows} uj={uj} ujLabel={ujLabel} />
-      <Ranking rows={rows} examKeys={examKeys} uj={uj} ujLabel={ujLabel} />
-      <Daftar rows={rows} examKeys={examKeys} />
-    </section>
+      {!d ? (
+        <>
+          {dash.loading && <div className="note"><Spinner />Mengambil data peserta dari Google Sheets… pemuatan pertama bisa memakan waktu beberapa detik.</div>}
+          <div className="grid g-2"><SkeletonCard lines={0} /><SkeletonCard lines={0} /></div>
+        </>
+      ) : (
+        <>
+          <div className="kpi-row six">
+            <Kpi label="Total peserta" value={fmtNum(d.kpi.totalParticipants)} icon="users" />
+            <Kpi label="Provinsi" value={fmtNum(d.kpi.totalProvinces)} icon="pin" />
+            <Kpi label="Sekolah / instansi" value={fmtNum(d.kpi.totalSchools)} icon="building" />
+            <Kpi label="Ujian bernilai" value={d.kpi.totalExamsWithData + (d.kpi.totalExams > d.kpi.totalExamsWithData ? " / " + d.kpi.totalExams : "")} icon="clipboard" />
+            <Kpi label={"Rata-rata · " + (d.kpi.selectedExamLabel || "–")} value={d.kpi.averageScore == null ? "–" : Number(d.kpi.averageScore).toLocaleString("id-ID", { maximumFractionDigits: 1 })} icon="target" />
+            <Kpi label="Sudah dinilai" value={fmtNum(d.kpi.gradedCount)} hint={`dari ${fmtNum(d.kpi.totalParticipants)} peserta`} icon="checkCircle" />
+          </div>
+          <Charts d={d} />
+          <Ranking d={d} sort={ui.rankingSortBy} onSort={(v) => patch("pst", { rankingSortBy: v })} showAll={ui.rankAll} onToggle={() => patch("pst", { rankAll: !ui.rankAll })} />
+          <Schools d={d} />
+        </>
+      )}
+      <Participants query={query} exams={fo?.ujians || []} />
+    </div>
   );
 }
 
-function PesertaCharts({ rows, examKeys, uj, ujLabel }) {
+function Charts({ d }) {
   const c = useMemo(() => {
-    // 1) tren rata-rata per ujian
-    const tren = examKeys.map((k) => {
-      const v = rows.map((p) => (p.n[k] && p.n[k].v !== null) ? p.n[k].v : null).filter((x) => x !== null);
-      return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10 : null;
-    });
-    const cnt = examKeys.map((k) => rows.filter((p) => p.n[k] && p.n[k].v !== null).length);
-    const trenCfg = {
+    const sel = d.kpi.selectedExamKey;
+    const trend = {
       type: "bar",
       data: {
-        labels: examKeys.length ? examKeys.map(pstExamLabel) : ["(belum ada ujian)"],
-        datasets: [{ label: "Rata-rata nilai", data: tren, backgroundColor: examKeys.map((k) => k === uj ? NAVY : BLUE), borderRadius: 6, maxBarThickness: 70 }],
+        labels: d.charts.scoreTrend.length ? d.charts.scoreTrend.map((x) => x.label) : ["(belum ada ujian)"],
+        datasets: [{ label: "Rata-rata", data: d.charts.scoreTrend.map((x) => x.averageScore),
+          backgroundColor: d.charts.scoreTrend.map((x) => (x.examKey === sel ? NAVY : "#9EC1E6")), borderRadius: 5, maxBarThickness: 60 }],
       },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (x) => `Rata-rata ${x.parsed.y} · ${cnt[x.dataIndex]} peserta dinilai` } } },
-        scales: { y: { beginAtZero: true, suggestedMax: 100, title: { display: true, text: "Nilai" } } },
-      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: (x) => `Rata-rata ${x.parsed.y} · ${d.charts.scoreTrend[x.dataIndex].gradedCount} peserta dinilai` } } },
+        scales: { x: { grid: { display: false } }, y: { beginAtZero: true, suggestedMax: 100 } } },
     };
-    // 2) distribusi indeks ujian terpilih
-    const idxCount = {};
-    rows.forEach((p) => { const ix = p.n[uj] && p.n[uj].idx; if (ix) idxCount[ix] = (idxCount[ix] || 0) + 1; });
-    const idxLabels = PST_IDX_ORDER.filter((x) => idxCount[x] || ["A", "AB", "B", "BC", "C", "D", "E"].includes(x))
-      .concat(Object.keys(idxCount).filter((x) => !PST_IDX_ORDER.includes(x)).sort());
-    const idxCfg = {
+    const idx = {
       type: "bar",
-      data: { labels: idxLabels, datasets: [{ label: "Peserta", data: idxLabels.map((x) => idxCount[x] || 0),
-        backgroundColor: idxLabels.map((x) => PST_IDX_LOW[x] ? ORANGE : NAVY), borderRadius: 6, maxBarThickness: 70 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+      data: { labels: d.charts.indexDistribution.map((x) => x.index),
+        datasets: [{ label: "Peserta", data: d.charts.indexDistribution.map((x) => x.count),
+          backgroundColor: d.charts.indexDistribution.map((x) => (x.isLow ? ORANGE : BLUE)), borderRadius: 5, maxBarThickness: 60 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { precision: 0 } } } },
     };
-    // 3 & 4) sebaran provinsi / fakultas (horizontal, top 10)
-    const topBar = (field) => {
-      const m = {};
-      rows.forEach((p) => { const v = p[field] || "(kosong)"; m[v] = (m[v] || 0) + 1; });
-      const top = Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 10);
-      return {
-        type: "bar",
-        data: { labels: top.length ? top.map((x) => x[0]) : ["(kosong)"], datasets: [{ label: "Peserta", data: top.map((x) => x[1]), backgroundColor: BLUE, borderRadius: 5, maxBarThickness: 34 }] },
-        options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } },
-      };
-    };
-    return { trenCfg, idxCfg, provCfg: topBar("prov"), fakCfg: topBar("fak") };
-  }, [rows, examKeys, uj]);
-
+    const top = (list) => ({
+      type: "bar",
+      data: { labels: list.length ? list.map((x) => x.name) : ["(kosong)"], datasets: [{ label: "Peserta", data: list.map((x) => x.count), backgroundColor: BLUE, borderRadius: 4, maxBarThickness: 22 }] },
+      options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { grid: { display: false } } } },
+    });
+    return { trend, idx, prov: top(d.charts.topProvinces), fak: top(d.charts.topFaculties) };
+  }, [d]);
+  const card = (title, sub, cfg, h) => (
+    <section className="card"><div className="card-head"><div><h2 className="card-title">{title}</h2><div className="card-sub">{sub}</div></div></div><ChartCanvas config={cfg} height={h} /></section>
+  );
   return (
     <>
-      <div className="grid-2 gap">
-        <div className="card"><h3>Perkembangan Nilai Akhir</h3><div className="sub">Rata-rata nilai per tanggal ujian</div><ChartCanvas config={c.trenCfg} /></div>
-        <div className="card"><h3>Distribusi Indeks</h3><div className="sub">Jumlah peserta per indeks · ujian {ujLabel}</div><ChartCanvas config={c.idxCfg} /></div>
+      <div className="grid g-2">
+        {card("Perkembangan nilai akhir", "Rata-rata nilai per tanggal ujian; batang gelap = ujian terpilih", c.trend, 240)}
+        {card("Distribusi indeks", "Jumlah peserta per indeks · ujian " + (d.kpi.selectedExamLabel || "–") + " (oranye = C ke bawah)", c.idx, 240)}
       </div>
-      <div className="grid-2 gap">
-        <div className="card"><h3>Sebaran Provinsi</h3><div className="sub">10 provinsi terbanyak</div><ChartCanvas config={c.provCfg} /></div>
-        <div className="card"><h3>Fakultas / Jurusan</h3><div className="sub">10 terbanyak</div><ChartCanvas config={c.fakCfg} /></div>
+      <div className="grid g-2">
+        {card("Sebaran provinsi", "10 provinsi terbanyak", c.prov, 300)}
+        {card("Fakultas / jurusan", "10 terbanyak", c.fak, 300)}
       </div>
     </>
   );
 }
 
-function Sekolah({ rows, uj, ujLabel }) {
-  const { sekSearch, sekAll } = useUiStore((s) => s.pst);
-  const patch = useUiStore((s) => s.patch);
-  const q = sekSearch.trim().toLowerCase();
-
-  const { list, nSek } = useMemo(() => {
-    const g = {};
-    rows.forEach((p) => {
-      const k = p.sek || "(tidak diisi)";
-      const o = g[k] = g[k] || { n: 0, prov: {}, nilai: [], per: {} };
-      o.n++;
-      // frekuensi: berapa periode berbeda sekolah ini ikut (per program + periode)
-      const perKey = (p.prog || "-") + " · Periode " + (p.periode || "-");
-      o.per[perKey] = (o.per[perKey] || 0) + 1;
-      if (p.prov) o.prov[p.prov] = (o.prov[p.prov] || 0) + 1;
-      const e = p.n[uj]; if (e && e.v !== null) o.nilai.push(e.v);
-    });
-    const list = Object.entries(g).map(([nama, o]) => ({
-      nama, n: o.n,
-      prov: Object.entries(o.prov).sort((a, b) => b[1] - a[1]).map((x) => x[0])[0] || "–",
-      avg: o.nilai.length ? o.nilai.reduce((a, b) => a + b, 0) / o.nilai.length : null, dinilai: o.nilai.length,
-      frek: Object.keys(o.per).length,
-      perList: Object.entries(o.per).sort((a, b) => a[0].localeCompare(b[0], "id", { numeric: true })),
-    })).sort((a, b) => b.n - a.n || a.nama.localeCompare(b.nama));
-    let prev = null, prevRank = 0;
-    list.forEach((x, i) => { x.rank = (prev !== null && x.n === prev) ? prevRank : i + 1; prev = x.n; prevRank = x.rank; });
-    return { list, nSek: list.filter((x) => x.nama !== "(tidak diisi)").length };
-  }, [rows, uj]);
-
-  const filtered = q ? list.filter((x) => x.nama.toLowerCase().includes(q) || x.prov.toLowerCase().includes(q)) : list;
-  const show = (sekAll || q) ? filtered : filtered.slice(0, 10);
-  const total = rows.length || 1;
-
+function Ranking({ d, sort, onSort, showAll, onToggle }) {
+  const list = d.rankings;
+  const shown = showAll ? list : list.slice(0, 10);
+  const metric = { ujian: "Nilai " + (d.kpi.selectedExamLabel || ""), rata: "Rata-rata", naik: "Kenaikan" }[sort];
   return (
-    <div className="card">
-      <div className="pst-head">
-        <div><h3>Sebaran Sekolah</h3>
-          <div className="sub">{`${nSek} sekolah/instansi · ${rows.length} peserta` + (q ? ` · ${filtered.length} cocok dengan "${q}"` : "")}</div></div>
-        <input type="search" placeholder="Cari sekolah…" style={{ minWidth: 220 }} value={sekSearch}
-          onChange={(e) => patch("pst", { sekSearch: e.target.value })} />
+    <section className="card">
+      <div className="card-head">
+        <div><h2 className="card-title">Peringkat peserta</h2><div className="card-sub">{list.length ? `${list.length} peserta punya nilai untuk urutan ini` + (sort === "naik" ? " (minimal 2 ujian)" : "") : "Belum ada peserta dengan nilai untuk urutan ini"}</div></div>
+        <Segmented label="Urutkan peringkat" value={sort} onChange={onSort} options={SORTS} />
       </div>
-      <div className="table-wrap"><table>
-        <thead><tr><th>No</th><th>Nama Sekolah / Instansi</th><th>Provinsi</th><th>Jumlah Peserta</th><th>% dari Total</th>
-          <th title="Berapa periode berbeda sekolah ini mengirim peserta">Frekuensi Ikut</th><th>Rata-rata Nilai {ujLabel}</th></tr></thead>
-        <tbody>
-          {!show.length && <tr><td colSpan={7} className="nil-muted">Tidak ada data sekolah.</td></tr>}
-          {show.map((x) => {
-            const pc = x.n / total * 100;
-            return (
-              <tr key={x.nama}>
-                <td>{x.rank}</td><td><b>{x.nama}</b></td><td>{x.prov}</td>
-                <td className="pst-val">{x.n.toLocaleString("id-ID")}</td>
-                <td><div className="pst-bar"><span style={{ width: Math.max(2, pc).toFixed(1) + "%" }} /></div>{pc.toFixed(1)}%</td>
-                <td title={x.perList.map(([k, n]) => k + ": " + n + " peserta").join("\n")}>
-                  <b>{x.frek}×</b>{" "}
-                  <span className="nil-muted">{x.perList.map(([k]) => k.replace(" · Periode ", " P")).slice(0, 4).join(", ") + (x.perList.length > 4 ? ", …" : "")}</span>
-                </td>
-                <td className={x.avg === null ? "nil-muted" : ""}>
-                  {x.avg === null ? "–" : <>{x.avg.toFixed(1)} <span className="nil-muted">({x.dinilai} dinilai)</span></>}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table></div>
-      {!q && filtered.length > 10 && (
-        <button className="see-more" type="button" onClick={() => patch("pst", { sekAll: !sekAll })}>
-          {sekAll ? "Tampilkan 10 teratas saja" : `Tampilkan semua (${filtered.length} sekolah)`}
-        </button>
-      )}
-    </div>
-  );
-}
-
-const SORTS = [["ujian", "Nilai ujian terpilih"], ["rata", "Rata-rata semua ujian"], ["naik", "Kenaikan tertinggi"]];
-
-function Ranking({ rows, examKeys, uj, ujLabel }) {
-  const { sort, rankAll } = useUiStore((s) => s.pst);
-  const patch = useUiStore((s) => s.patch);
-  const metricName = { ujian: "Nilai " + ujLabel, rata: "Rata-rata", naik: "Kenaikan" }[sort];
-
-  const scored = useMemo(() => {
-    const list = rows.map((p) => {
-      const st = pstStats(p, examKeys);
-      const val = sort === "ujian" ? ((p.n[uj] && p.n[uj].v !== null) ? p.n[uj].v : null) : sort === "rata" ? st.avg : st.naik;
-      return { p, val };
-    }).filter((x) => x.val !== null).sort((a, b) => b.val - a.val || a.p.nama.localeCompare(b.p.nama));
-    // ranking kompetisi: nilai sama = ranking sama
-    let prevVal = null, prevRank = 0;
-    list.forEach((x, i) => { x.rank = (prevVal !== null && x.val === prevVal) ? prevRank : i + 1; prevVal = x.val; prevRank = x.rank; });
-    return list;
-  }, [rows, examKeys, uj, sort]);
-
-  const show = rankAll ? scored : scored.slice(0, 10);
-  return (
-    <div className="card">
-      <div className="pst-head">
-        <div><h3>Peringkat Peserta</h3>
-          <div className="sub">{scored.length
-            ? `Diurutkan menurut ${metricName.charAt(0).toLowerCase() + metricName.slice(1)} · ${scored.length} peserta punya nilai` + (sort === "naik" ? " (minimal 2 ujian)" : "")
-            : "Belum ada peserta dengan nilai untuk urutan ini."}</div></div>
-        <div className="prog-tabs" style={{ margin: 0 }}>
-          {SORTS.map(([k, t]) => (
-            <button key={k} type="button" className={"prog-tab" + (sort === k ? " active" : "")} onClick={() => patch("pst", { sort: k })}>{t}</button>
-          ))}
-        </div>
-      </div>
-      <div className="table-wrap"><table>
-        <thead><tr><th>Peringkat</th><th>Nama Peserta</th><th>Program</th><th>Sekolah</th><th>Provinsi</th><th>Fakultas/Jurusan</th>
-          <th>Kelompok</th><th>Indeks {ujLabel}</th>{examKeys.map((k) => <th key={k}>{pstExamLabel(k)}</th>)}<th>{metricName}</th></tr></thead>
-        <tbody>
-          {!show.length && <tr><td colSpan={9 + examKeys.length} className="nil-muted">Belum ada data nilai.</td></tr>}
-          {show.map((x, i) => {
-            const p = x.p, top = x.rank <= 3;
-            const valTxt = sort === "naik" ? (x.val > 0 ? "+" : "") + pstFmt(x.val) : pstFmt(x.val, sort === "rata" ? 1 : 0);
-            return (
-              <tr key={i} className={top ? "rank-top" : ""}>
-                <td><span className={"rank-no" + (top ? " top" : "")}>{x.rank}</span></td>
-                <td><b>{p.nama}</b></td><td>{p.prog}</td><td>{p.sek || "–"}</td><td>{p.prov || "–"}</td>
-                <td>{p.fak || "–"}</td><td>{p.kel || "–"}</td><td><IdxChip ix={p.n[uj] && p.n[uj].idx} /></td>
-                {examKeys.map((k) => <td key={k} className={p.n[k] && p.n[k].v !== null ? "" : "nil-muted"}>{pstFmt(p.n[k] ? p.n[k].v : null)}</td>)}
-                <td className="pst-val">{valTxt}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table></div>
-      {scored.length > 10 && (
-        <button className="see-more" type="button" onClick={() => patch("pst", { rankAll: !rankAll })}>
-          {rankAll ? "Tampilkan 10 teratas saja" : `Tampilkan semua (${scored.length} peserta)`}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function Daftar({ rows, examKeys }) {
-  const { search, listN } = useUiStore((s) => s.pst);
-  const patch = useUiStore((s) => s.patch);
-  const q = search.trim().toLowerCase();
-  const list = q ? rows.filter((p) => [p.nama, p.sek, p.kel, p.prov, p.fak, p.id].join(" ").toLowerCase().includes(q)) : rows;
-
-  return (
-    <div className="card">
-      <div className="pst-head">
-        <div><h3>Daftar Peserta</h3><div className="sub">{`${list.length} peserta` + (q ? ` cocok dengan "${q}"` : "")}</div></div>
-        <input type="search" placeholder="Cari nama, sekolah, kelompok…" style={{ minWidth: 240 }} value={search}
-          onChange={(e) => patch("pst", { search: e.target.value, listN: 50 })} />
-      </div>
-      <div className="table-wrap"><table>
-        <thead><tr><th>No</th><th>Nama Peserta</th><th>PIC</th><th>Program</th><th>Periode</th><th>Aktivitas</th>
-          <th>Provinsi</th><th>Nama Sekolah</th><th>Fakultas/Jurusan</th><th>Skema</th><th>Tipe</th><th>Kelompok</th>
-          {examKeys.map((k) => <th key={k}>{pstExamLabel(k)}</th>)}</tr></thead>
-        <tbody>
-          {!list.length && <tr><td colSpan={12 + examKeys.length} className="nil-muted">Tidak ada peserta.</td></tr>}
-          {list.slice(0, listN).map((p, i) => (
-            <tr key={i}>
-              <td>{i + 1}</td><td><b>{p.nama}</b></td><td>{p.pic}</td><td>{p.prog}</td><td>{p.periode}</td>
-              <td>{p.akt}</td><td>{p.prov}</td><td>{p.sek}</td><td>{p.fak}</td><td>{p.skema}</td><td>{p.tipe}</td><td>{p.kel}</td>
-              {examKeys.map((k) => { const e = p.n[k]; return e ? <td key={k}>{pstFmt(e.v)} <IdxChip ix={e.idx} /></td> : <td key={k} className="nil-muted">–</td>; })}
+      {!list.length ? <div className="empty-inline">Pilih ujian lain atau urutan lain.</div> : (
+        <div className="tbl-scroll"><table className="tbl compact">
+          <thead><tr><th className="c-rank">#</th><th>Peserta</th><th>Program</th><th>Fakultas</th><th>Indeks</th><th className="num">{metric}</th></tr></thead>
+          <tbody>{shown.map((p, i) => (
+            <tr key={i} className={p.rank <= 3 ? "top" : ""}>
+              <td className="c-rank"><span className={"rank-no" + (p.rank <= 3 ? " top" : "")}>{p.rank}</span></td>
+              <td><div className="cell-strong">{p.nama}</div><div className="row-meta"><span>{p.school}</span><span>{p.province}</span></div></td>
+              <td>{p.program}</td><td>{p.faculty || "–"}</td><td><IdxChip ix={p.index} /></td>
+              <td className="num cell-strong">{sort === "naik" && p.metricValue > 0 ? "+" : ""}{Number(p.metricValue).toLocaleString("id-ID", { maximumFractionDigits: 1 })}</td>
             </tr>
-          ))}
-        </tbody>
-      </table></div>
-      {list.length > listN && (
-        <button className="see-more" type="button" onClick={() => patch("pst", { listN: listN + 50 })}>
-          Tampilkan lebih banyak ({list.length - listN} lagi)
-        </button>
+          ))}</tbody>
+        </table></div>
       )}
-    </div>
+      {list.length > 10 && <button type="button" className="see-more" onClick={onToggle}>{showAll ? "Tampilkan 10 teratas" : `Lihat semua (${list.length})`}<Icon name={showAll ? "up" : "down"} size={15} /></button>}
+    </section>
+  );
+}
+
+function Schools({ d }) {
+  const { schoolSearch: q, sekAll } = useUiStore((s) => s.pst);
+  const patch = useUiStore((s) => s.patch);
+  const ql = q.trim().toLowerCase();
+  const list = ql ? d.schools.filter((s) => s.school.toLowerCase().includes(ql) || (s.province || "").toLowerCase().includes(ql)) : d.schools;
+  const shown = sekAll || ql ? list : list.slice(0, 10);
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div><h2 className="card-title">Sebaran sekolah</h2><div className="card-sub">{d.schools.length} sekolah/instansi{ql && ` · ${list.length} cocok`}</div></div>
+        <div className="search compact"><Icon name="search" size={16} />
+          <input type="search" placeholder="Cari sekolah atau provinsi" aria-label="Cari sekolah" value={q} onChange={(e) => patch("pst", { schoolSearch: e.target.value })} /></div>
+      </div>
+      {!list.length ? <div className="empty-inline">Tidak ada sekolah yang cocok.</div> : (
+        <div className="tbl-scroll"><table className="tbl compact">
+          <thead><tr><th className="c-rank">#</th><th>Sekolah / instansi</th><th className="num">Peserta</th><th className="c-share">Porsi</th>
+            <th title="Berapa periode berbeda sekolah ini mengirim peserta">Frekuensi</th><th className="num">Rata-rata nilai</th></tr></thead>
+          <tbody>{shown.map((s) => (
+            <tr key={s.school}>
+              <td className="c-rank muted">{s.rank}</td>
+              <td><div className="cell-strong">{s.school}</div><div className="row-meta"><span>{s.province || "–"}</span></div></td>
+              <td className="num cell-strong">{fmtNum(s.participantCount)}</td>
+              <td className="c-share"><span className="att-cell"><Bar value={s.percentage} />{Number(s.percentage).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</span></td>
+              <td title={s.periods.map((p) => `${p.key}: ${p.count} peserta`).join("\n")}>{s.frequency}× <span className="muted small">{s.periods.slice(0, 2).map((p) => p.key).join(", ")}{s.periods.length > 2 ? ", …" : ""}</span></td>
+              <td className="num">{s.averageScore == null ? <span className="muted">–</span> : Number(s.averageScore).toLocaleString("id-ID", { maximumFractionDigits: 1 })}{s.gradedCount > 0 && <span className="muted small"> · {s.gradedCount} dinilai</span>}</td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+      )}
+      {!ql && list.length > 10 && <button type="button" className="see-more" onClick={() => patch("pst", { sekAll: !sekAll })}>{sekAll ? "Tampilkan 10 teratas" : `Lihat semua (${list.length})`}<Icon name={sekAll ? "up" : "down"} size={15} /></button>}
+    </section>
+  );
+}
+
+function Participants({ query, exams }) {
+  const ui = useUiStore((s) => s.pst);
+  const patch = useUiStore((s) => s.patch);
+  const { data, error, loading, reload } = useApi("/peserta/participants", { ...query, search: ui.search, page: ui.page, perPage: ui.perPage });
+  const rows = data?.data || [];
+  const [open, setOpen] = useState(null);
+  const scoreChips = (p) => exams.filter((u) => p.scores?.[u.key]?.value != null).map((u) => (
+    <span key={u.key} className="score" title={u.label}><small>{u.label.replace(/ \d{4}$/, "")}</small><b>{p.scores[u.key].value}</b><IdxChip ix={p.scores[u.key].index} /></span>
+  ));
+  return (
+    <section className="card tbl-card">
+      <div className="tbl-head"><div><h2 className="card-title">Daftar peserta</h2>
+        <div className="card-sub">{data?.pagination ? fmtNum(data.pagination.totalRecords) + " peserta sesuai filter" : "Memuat…"}</div></div></div>
+      <div className="tbl-toolbar">
+        <SearchInput value={ui.search} onChange={(v) => patch("pst", { search: v, page: 1 })} placeholder="Cari nama, sekolah, atau kelompok" />
+      </div>
+      <ErrorNote error={error} onRetry={() => reload()} />
+      {!data && loading ? <SkeletonCard lines={6} /> : !rows.length ? (
+        <EmptyState icon={ui.search ? "search" : "users"} title={ui.search ? `Tidak ada peserta yang cocok dengan "${ui.search}"` : "Belum ada peserta untuk filter ini"} />
+      ) : (
+        <div className={"tbl-body" + (loading ? " is-loading" : "")}>
+          <div className="tbl-scroll"><table className="tbl pst-tbl">
+            <thead><tr><th>Peserta</th><th>Program</th><th className="c-fak">Fakultas / jurusan</th><th className="c-kel">Kelompok</th><th>Nilai ujian</th></tr></thead>
+            <tbody>{rows.map((p, i) => (
+              <tr key={i} onClick={() => setOpen(p)}>
+                <td><button type="button" className="row-link" onClick={(e) => { e.stopPropagation(); setOpen(p); }}>{p.nama}</button>
+                  <div className="row-meta"><span>{p.sekolah || "–"}</span>{p.provinsi && <span>{p.provinsi}</span>}</div></td>
+                <td><div>{p.program}{p.periode && <span className="muted"> · P{p.periode}</span>}</div><div className="row-meta"><span className="trunc">{p.aktivitas}</span></div></td>
+                <td className="c-fak">{p.fakultas || <span className="muted">–</span>}</td>
+                <td className="c-kel">{p.kelompok || <span className="muted">–</span>}</td>
+                <td><div className="scores">{scoreChips(p).length ? scoreChips(p) : <span className="muted">Belum ada nilai</span>}</div></td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+          <ul className="rec-list">{rows.map((p, i) => (
+            <li key={i} className="rec"><button type="button" className="rec-main" onClick={() => setOpen(p)}>
+              <span className="rec-top"><span className="rec-name">{p.nama}</span></span>
+              <span className="rec-meta"><span>{p.sekolah || "–"}</span><span>{p.program}{p.periode && " · P" + p.periode}</span></span>
+              <span className="scores">{scoreChips(p)}</span>
+            </button></li>
+          ))}</ul>
+        </div>
+      )}
+      <Pagination pagination={data?.pagination} perPage={ui.perPage} noun="peserta"
+        onPage={(n) => patch("pst", { page: n })} onPerPage={(n) => patch("pst", { perPage: n, page: 1 })} />
+      <Sheet open={!!open} onClose={() => setOpen(null)} title={open?.nama} sub={open && open.program + (open.periode ? " · Periode " + open.periode : "")}>
+        {open && (
+          <>
+            <dl className="facts">
+              {[["Sekolah", open.sekolah], ["Provinsi", open.provinsi], ["Aktivitas", open.aktivitas], ["Fakultas / jurusan", open.fakultas],
+                ["Skema", open.skema], ["Tipe", open.tipe], ["Kelompok", open.kelompok], ["PIC", open.pic]].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v || "–"}</dd></div>)}
+            </dl>
+            <h3 className="detail-h">Nilai ujian</h3>
+            <table className="mini-tbl"><thead><tr><th>Ujian</th><th className="num">Nilai</th><th>Indeks</th></tr></thead>
+              <tbody>{exams.map((u) => { const s = open.scores?.[u.key]; return <tr key={u.key}><td>{u.label}</td><td className="num">{s?.value ?? "–"}</td><td><IdxChip ix={s?.index} /></td></tr>; })}</tbody></table>
+          </>
+        )}
+      </Sheet>
+    </section>
   );
 }

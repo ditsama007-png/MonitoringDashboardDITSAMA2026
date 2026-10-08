@@ -1,13 +1,15 @@
-import { useMemo, useState } from "react";
-import { Link, NavLink, Outlet, useMatches } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Link, NavLink, Outlet, useLocation, useMatches } from "react-router";
 import { useShallow } from "zustand/react/shallow";
-import { AccessOverlay, AuthGate } from "../../components/AuthGate.jsx";
-import { SelectField } from "../../components/ui.jsx";
+import { FeedbackHost } from "../../components/feedback.jsx";
+import { Icon } from "../../components/Icon.jsx";
+import { SelectField, Sheet, Spinner } from "../../components/ui.jsx";
 import { PROGRAMS, SUGT_URL } from "../../config.js";
-import { useDashFilters } from "../../lib/dashboard.js";
-import { idLabel, isAllAccess, isFinanceOnly, labelOf, ongoingItems, upcomingMilestones } from "../../lib/format.js";
+import { ACCESS } from "../../components/Access.jsx";
+import { AccessOverlay, AuthGate } from "../../components/AuthGate.jsx";
+import { isAllAccess, levelLabel, programByApi, progColor, roleLabel, withoutAll } from "../../lib/format.js";
 import { useAuthStore } from "../../stores/auth.js";
-import { useDataStore } from "../../stores/data.js";
+import { useApi } from "../../stores/data.js";
 import { useUiStore } from "../../stores/ui.js";
 import dashboardCss from "../../styles/dashboard.css?url";
 
@@ -19,161 +21,174 @@ export function meta() {
   return [{ title: "Dashboard Monitoring Program DITSAMA 2026" }];
 }
 
-// Mulai memuat DataMasuk + Financial tanpa menunggu: gerbang login tampil langsung,
-// data menyusul di latar belakang (semua halaman membacanya dari store zustand).
-export function clientLoader() {
-  useDataStore.getState().ensureCore();
-  return null;
-}
-
-const PROGRAM_NAV = [
-  ["SIAP", "Program SIAP"], ["INSPIRASI_EDQ", "Program EduQuest"], ["INSPIRASI_SCD", "Program PSCD"],
-  ["OSN", "Program OSN"], ["OPSI", "Program OPSI"], ["RISET", "Program Riset"], ["BTI", "Program BTI"],
-  ["WIT", "Program WIT"], ["MAUNG", "Program MAUNG"],
-];
 const navClass = ({ isActive }) => "nav-item" + (isActive ? " active" : "");
+
+// tautan menu; untuk jabatan tanpa akses tetap tampil tapi nonaktif
+function NavItem({ session, area, to, end, children }) {
+  const rule = area && ACCESS[area];
+  if (rule && !rule.can(session)) {
+    const why = `Hanya untuk ${rule.who}`;
+    return (
+      <span className="nav-item disabled" role="link" aria-disabled="true" title={why}>
+        {children}<Icon name="lock" size={14} className="nav-lock" /><span className="sr-only">({why})</span>
+      </span>
+    );
+  }
+  return <NavLink className={navClass} to={to} end={end}>{children}</NavLink>;
+}
 
 export default function DashboardLayout() {
   const session = useAuthStore((s) => s.session);
-  const unlocked = useAuthStore((s) => s.accessUnlocked);
-  const flexRows = useDataStore((s) => s.flex.rows);
-  const { railHidden, controlHidden, toggleRail, toggleControl } = useUiStore(useShallow((s) => ({
-    railHidden: s.railHidden, controlHidden: s.controlHidden, toggleRail: s.toggleRail, toggleControl: s.toggleControl,
+  if (!session) return <><AuthGate /><FeedbackHost /></>;
+  if (!session.token) return <><AccessOverlay /><FeedbackHost /></>;
+  return <Shell session={session} />;
+}
+
+function Shell({ session }) {
+  const ui = useUiStore(useShallow((s) => ({
+    railOpen: s.railOpen, railHidden: s.railHidden, controlOpen: s.controlOpen, controlHidden: s.controlHidden, set: s.set,
   })));
   const [profileOpen, setProfileOpen] = useState(false);
+  const location = useLocation();
+  const matches = useMatches();
+  const withControl = matches.some((m) => m.handle?.control);
 
-  // `handle` dari route anak: { control: true } -> tampilkan panel Control + judul
-  const withControl = useMatches().some((m) => m.handle?.control);
-  // program terpilih di filter Control -> judul memakai nama lengkapnya
-  const dashProgram = useUiStore((s) => PROGRAMS.find((p) => p.label === s.dash.program));
+  // tutup laci menu (ponsel) setiap pindah halaman
+  useEffect(() => { ui.set({ railOpen: false, controlOpen: false }); }, [location.pathname]);
 
-  // badge notif jumlah On-Going (merah) & Upcoming (kuning) di tiap menu program
-  const badges = useMemo(() => Object.fromEntries(PROGRAM_NAV.map(([key]) =>
-    [key, { on: ongoingItems(flexRows, key).length, up: upcomingMilestones(flexRows, key).length }])), [flexRows]);
-
-  const openSugt = (e) => {
-    e.preventDefault();
-    const url = String(SUGT_URL || "").trim();
-    if (!url) { alert("Link dashboard SUGT belum diatur (SUGT_URL di config.js)."); return; }
-    window.open(url, "_blank", "noopener");
-  };
+  // badge jumlah Berlangsung (merah) & Akan Datang (kuning) per program dari kalender dashboard utama
+  const canActivities = ACCESS.activities.can(session);
+  const { data } = useApi("/dashboard", {}, { enabled: canActivities });
+  const badges = useMemo(() => {
+    const out = {};
+    (data?.data?.calendar || []).forEach((e) => {
+      const b = (out[e.program] = out[e.program] || { on: 0, up: 0 });
+      if (e.status === "ongoing") b.on++;
+      if (e.status === "upcoming") b.up++;
+    });
+    return out;
+  }, [data]);
 
   return (
-    <div className={"app" + (session && !unlocked ? " blurred" : "")} id="app">
-      {/* ============== RAIL: MENU UTAMA (navy) ============== */}
-      <aside className={"rail" + (railHidden ? " hide" : "")} id="rail">
+    <div className={"app" + (ui.railHidden ? " rail-hidden" : "")}>
+      <a className="skip" href="#main">Langsung ke konten</a>
+      <aside className={"rail" + (ui.railOpen ? " open" : "")} aria-label="Menu utama">
         <div className="rail-top">
-          <div className="rail-brand">
-            <span className="badge">ITB</span>
-            <div><b>Pra Universitas</b><small>Dashboard DITSAMA</small></div>
-          </div>
-          <button className="hamb" type="button" title="Sembunyikan menu" onClick={toggleRail}>&#9776;</button>
+          <Link to="/" className="rail-brand">
+            <img className="badge-itb" src={import.meta.env.BASE_URL + "assets/itb-logo.png"} alt="Logo ITB" width="36" height="36" />
+            <span><b>Pra Universitas</b><small>Dashboard DITSAMA 2026</small></span>
+          </Link>
+          <button className="icon-btn on-dark rail-close" type="button" onClick={() => ui.set({ railOpen: false })} aria-label="Tutup menu"><Icon name="x" size={18} /></button>
         </div>
         <nav className="rail-nav">
-          <Link className="nav-home" to="/">&#127968; Beranda</Link>
-          <NavLink className={navClass} to="/dashboard" end>Portofolio Program</NavLink>
-          <NavLink className={navClass} to="/dashboard/financial">💰 Keuangan</NavLink>
-          <NavLink className={navClass} to="/dashboard/peserta">🎓 Peserta</NavLink>
-          <NavLink className={navClass} to="/dashboard/dosen">👨‍🏫 Portofolio Dosen</NavLink>
-          {/* Finance hanya boleh mengisi menu Keuangan */}
-          {!(session && isFinanceOnly(session.jabatan)) && (
-            <NavLink className={navClass} to="/dashboard/input">📝 Input Data</NavLink>
-          )}
-          <div className="nav-label">Lihat Dashboard Program</div>
-          {PROGRAM_NAV.map(([key, text]) => (
-            <NavLink key={key} className={navClass} to={`/dashboard/program/${key}`}>
-              {text}
-              {badges[key].on > 0 && <span className="nav-badge red" title="Berlangsung">{badges[key].on}</span>}
-              {badges[key].up > 0 && <span className="nav-badge yellow" title="Akan Datang">{badges[key].up}</span>}
-            </NavLink>
-          ))}
-          <a className="nav-item nav-ext" href={SUGT_URL || "#"} target="_blank" rel="noopener" onClick={openSugt}>
-            Program SUGT <span className="ext-ic">↗</span>
-          </a>
+          <NavItem session={session} area="activities" to="/dashboard" end><Icon name="grid" />Portofolio Program</NavItem>
+          <NavItem session={session} area="finance" to="/dashboard/financial"><Icon name="wallet" />Keuangan</NavItem>
+          <NavItem session={session} area="activities" to="/dashboard/peserta"><Icon name="users" />Peserta</NavItem>
+          <NavItem session={session} area="activities" to="/dashboard/dosen"><Icon name="grad" />Portofolio Dosen</NavItem>
+          <NavItem session={session} area="activities" to="/dashboard/input"><Icon name="clipboard" />Data Kegiatan</NavItem>
+          <div className="nav-label">Dashboard program</div>
+          {PROGRAMS.map((p) => {
+            const b = badges[p.api];
+            return (
+              <NavItem key={p.key} session={session} area="activities" to={`/dashboard/program/${p.key}`}>
+                <span className="nav-dot" style={{ background: progColor(p.api) }} aria-hidden="true" />
+                <span className="nav-txt">{p.label}</span>
+                {b?.on > 0 && <span className="nav-badge red" title={`${b.on} kegiatan berlangsung`}>{b.on}</span>}
+                {b?.up > 0 && <span className="nav-badge yellow" title={`${b.up} kegiatan akan datang`}>{b.up}</span>}
+              </NavItem>
+            );
+          })}
+          <a className="nav-item" href={SUGT_URL} target="_blank" rel="noopener"><Icon name="external" />Program SUGT</a>
         </nav>
         <button className="rail-foot" type="button" onClick={() => setProfileOpen(true)}>
-          <span className="ava">&#128100;</span> <span>{session ? session.nama + " · " + session.jabatan : "Profil"}</span>
+          <span className="ava">{(session.name || "?").slice(0, 1).toUpperCase()}</span>
+          <span className="rail-who"><b>{session.name}</b><small>{roleLabel(session.role)}</small></span>
+          <Icon name="right" size={16} />
         </button>
       </aside>
+      <div className="scrim" hidden={!ui.railOpen && !ui.controlOpen} onClick={() => ui.set({ railOpen: false, controlOpen: false })} />
 
-      {!session && <AuthGate />}
-      {session && !unlocked && <AccessOverlay />}
-      {session && profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
+      {withControl && canActivities && <ControlPanel open={ui.controlOpen} hidden={ui.controlHidden} />}
 
-      {withControl && <ControlPanel hidden={controlHidden} onToggle={toggleControl} />}
-
-      {/* ============== STAGE ============== */}
-      <main className="stage">
-        <div className="stage-top">
-          <button className="mini" type="button" title="Menu utama" onClick={toggleRail}>&#9776;</button>
-          {withControl && <button className="mini" type="button" title="Filter" onClick={toggleControl}>&#8942; Filter</button>}
-          <h1 className="title" style={{ visibility: withControl ? "visible" : "hidden" }}>
-            {dashProgram ? <>{dashProgram.fullName}<span className="title-abbr">{dashProgram.label}</span></> : "Dashboard Program DITSAMA 2026"}
-          </h1>
+      <main className="stage" id="main">
+        <div className="topbar">
+          <button className="icon-btn" type="button" onClick={() => ui.set({ railOpen: true })} aria-label="Buka menu"><Icon name="menu" size={20} /></button>
+          <button className="icon-btn desk" type="button" onClick={() => ui.set({ railHidden: !ui.railHidden })}
+            aria-label={ui.railHidden ? "Tampilkan menu" : "Sembunyikan menu"} title={ui.railHidden ? "Tampilkan menu" : "Sembunyikan menu"}>
+            <Icon name="menu" size={20} />
+          </button>
+          {withControl && canActivities && (
+            <button className="btn btn-sm topbar-filter" type="button"
+              onClick={() => (window.matchMedia("(max-width: 1100px)").matches ? ui.set({ controlOpen: true }) : ui.set({ controlHidden: !ui.controlHidden }))}>
+              <Icon name="filter" size={16} />Filter
+            </button>
+          )}
         </div>
         <Outlet />
       </main>
+
+      <ProfileSheet open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <FeedbackHost />
     </div>
   );
 }
 
-function ProfileModal({ onClose }) {
+function ProfileSheet({ open, onClose }) {
   const session = useAuthStore((s) => s.session);
   const logout = useAuthStore((s) => s.logout);
-  const progText = isAllAccess(session.jabatan)
-    ? "Semua program"
-    : ((session.programs || []).map(labelOf).join(", ") || "-");
+  const progs = isAllAccess(session) ? "Semua program" : session.role === "finance" ? "Hanya Keuangan"
+    : (session.programs || []).map((p) => programByApi(p)?.label || p).join(", ") || "–";
   return (
-    <div className="modal" id="profile-modal">
-      <div className="modal-box">
-        <h3>Profil</h3>
-        <div className="sub">
-          <b>{session.nama}</b><br />Jabatan: {session.jabatan}
-          <br />Email: {session.email || "-"}
-          <br />Akses program: {progText}
-        </div>
-        <div className="form-actions">
-          <button className="btn-ghost" type="button" onClick={() => { onClose(); logout(); }}>Logout</button>
-          <button className="btn-ghost" type="button" onClick={onClose}>Tutup</button>
-        </div>
+    <Sheet open={open} onClose={onClose} title="Profil" footer={(
+      <><span className="grow" /><button className="btn btn-danger-ghost" type="button" onClick={() => { onClose(); logout(); }}><Icon name="logout" size={16} />Keluar</button></>
+    )}>
+      <div className="profile">
+        <span className="ava lg">{(session.name || "?").slice(0, 1).toUpperCase()}</span>
+        <div><b>{session.name}</b><div className="muted">{session.email}</div></div>
       </div>
-    </div>
+      <dl className="facts">
+        <div><dt>Jabatan</dt><dd>{roleLabel(session.role)}</dd></div>
+        <div><dt>Akses program</dt><dd>{progs}</dd></div>
+        <div><dt>Hak ubah</dt><dd>{session.role === "finance" ? "Data keuangan" : session.role === "pic" ? "Data kegiatan program Anda (Keuangan tidak tersedia)" : "Semua data kegiatan & keuangan"}</dd></div>
+      </dl>
+    </Sheet>
   );
 }
 
-// ============== CONTROL: FILTER (biru terang) ==============
-function ControlPanel({ hidden, onToggle }) {
-  const { opts, values } = useDashFilters();
+// ============== PANEL FILTER (Portofolio Program) ==============
+const ALL = "Semua";
+function ControlPanel({ open, hidden }) {
+  const dash = useUiStore((s) => s.dash);
   const patch = useUiStore((s) => s.patch);
-  const loadFlex = useDataStore((s) => s.loadFlex);
-  const loadCapaian = useDataStore((s) => s.loadCapaian);
-  const [busy, setBusy] = useState(false);
-
-  const refresh = async () => {
-    setBusy(true);
-    useDataStore.setState((s) => ({ capaian: { ...s.capaian, raw: null } }));
-    await Promise.all([loadFlex(), loadCapaian()]);
-    setBusy(false);
-  };
-  const sel = (key, label) => (
-    <SelectField label={label} value={values[key]} options={opts[key].map((o) => [o, idLabel(o)])} onChange={(v) => patch("dash", { [key]: v })} />
+  const set = useUiStore((s) => s.set);
+  const { data, loading, reload } = useApi("/dashboard", withoutAll(dash));
+  const fo = data?.data?.filterOptions;
+  const opts = (list) => [ALL, ...(list || [])];
+  const keep = (list, v) => (v === ALL || (list || []).includes(v) ? v : ALL);
+  const active = Object.values(dash).filter((v) => v !== ALL).length;
+  const sel = (key, label, list, fmt) => (
+    <SelectField label={label} value={keep(list, dash[key])} options={opts(list).map((o) => [o, fmt && o !== ALL ? fmt(o) : o])}
+      onChange={(v) => patch("dash", { [key]: v, ...(key === "program" ? { activity: ALL } : {}) })} />
   );
-
   return (
-    <aside className={"control" + (hidden ? " hide" : "")} id="control">
-      <div className="control-head">Filter
-        <button className="chev" type="button" title="Sembunyikan filter" onClick={onToggle}>&#8249;</button>
+    <aside className={"control" + (open ? " open" : "") + (hidden ? " hide" : "")} aria-label="Filter dashboard">
+      <div className="control-head">
+        <span><Icon name="filter" size={17} />Filter{active > 0 && <span className="count">{active}</span>}</span>
+        <button className="icon-btn on-dark" type="button" onClick={() => set({ controlOpen: false, controlHidden: !open })} aria-label="Tutup filter"><Icon name="x" size={18} /></button>
       </div>
       <div className="control-body">
-        {sel("program", "Program")}
-        {sel("tahun", "Tahun")}
-        {sel("bulan", "Bulan")}
-        {sel("fase", "Jenis Fase")}
-        {sel("kegiatan", "Kegiatan")}
-        {sel("level", "Level Isu")}
-        <button className="btn-ghost" type="button" disabled={busy} onClick={refresh}>
-          {busy ? "⏳ Memuat…" : <>&#128260; Muat Ulang Data</>}
-        </button>
+        {sel("program", "Program", fo?.programs)}
+        {sel("year", "Tahun", fo?.years)}
+        {sel("month", "Bulan", fo?.months)}
+        {sel("phase", "Fase", fo?.phases)}
+        {sel("activity", "Kegiatan", fo?.activities)}
+        {sel("issueLevel", "Level isu", fo?.issueLevels, (v) => levelLabel(v.toLowerCase()))}
+        <div className="control-actions">
+          {active > 0 && <button className="btn btn-sm on-dark" type="button" onClick={() => patch("dash", { program: ALL, year: ALL, month: ALL, phase: ALL, activity: ALL, issueLevel: ALL })}>Reset</button>}
+          <button className="btn btn-sm on-dark" type="button" disabled={loading} onClick={() => reload({ refresh: true })}>
+            {loading ? <Spinner size={14} /> : <Icon name="refresh" size={15} />}Muat ulang
+          </button>
+        </div>
       </div>
     </aside>
   );
