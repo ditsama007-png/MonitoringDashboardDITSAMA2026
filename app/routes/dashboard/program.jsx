@@ -38,10 +38,10 @@ function ProgramPage({ loaderData }) {
       {!d ? <><div className="grid g-2"><SkeletonCard /><SkeletonCard /></div></> : (
         <>
           <div className="kpi-row">
-            <Kpi label="Kemajuan program" value={d.kpi.progress + "%"} hint={`${fmtNum(d.kpi.totalDone)} dari ${fmtNum(d.kpi.totalActivities)} kegiatan selesai`} icon="trend" />
-            <Kpi label="Berlangsung" value={fmtNum(d.kpi.totalOngoing)} tone="t-ongoing" icon="calendar" />
-            <Kpi label="Akan datang" value={fmtNum(d.kpi.totalUpcoming)} tone="t-upcoming" icon="calendar" />
-            <Kpi label="Selesai" value={fmtNum(d.kpi.totalDone)} tone="t-done" icon="checkCircle" />
+            <Kpi label="Kemajuan program" value={d.kpi.progress + "%"} hint={`${fmtNum(d.kpi.totalDone)} dari ${fmtNum(d.kpi.totalActivities)} aktivitas selesai`} icon="trend" />
+            <Kpi label="Aktivitas yang sedang berlangsung" value={fmtNum(d.kpi.totalOngoing)} tone="t-ongoing" icon="calendar" />
+            <Kpi label="Aktivitas akan datang" value={fmtNum(d.kpi.totalUpcoming)} tone="t-upcoming" icon="calendar" />
+            <Kpi label="Aktivitas selesai" value={fmtNum(d.kpi.totalDone)} tone="t-done" icon="checkCircle" />
           </div>
           <div className="grid g-2">
             <MilestoneCard title="Sedang berlangsung" tone="red" items={d.milestones.ongoing} program={program}

@@ -42,10 +42,10 @@ function PortfolioPage() {
       {!d ? <PortfolioSkeleton /> : (
         <>
           <div className="kpi-row">
-            <Kpi label="Kemajuan keseluruhan" value={d.kpi.progress + "%"} hint={`${fmtNum(d.kpi.totalDone)} dari ${fmtNum(d.kpi.totalActivities)} kegiatan selesai`} icon="trend" />
-            <Kpi label="Berlangsung" value={fmtNum(d.kpi.totalOngoing)} hint="H-2 sampai H+7 dari tanggal kegiatan" tone="t-ongoing" icon="calendar" />
-            <Kpi label="Akan datang" value={fmtNum(d.kpi.totalUpcoming)} hint="Terjadwal lebih dari 2 hari lagi" tone="t-upcoming" icon="calendar" />
-            <Kpi label="Selesai" value={fmtNum(d.kpi.totalDone)} hint="Lewat H+7 atau ditandai selesai" tone="t-done" icon="checkCircle" />
+            <Kpi label="Kemajuan keseluruhan" value={d.kpi.progress + "%"} hint={`${fmtNum(d.kpi.totalDone)} dari ${fmtNum(d.kpi.totalActivities)} aktivitas selesai`} icon="trend" />
+            <Kpi label="Aktivitas yang sedang berlangsung" value={fmtNum(d.kpi.totalOngoing)} hint="H-2 sampai H+7 dari tanggal aktivitas" tone="t-ongoing" icon="calendar" />
+            <Kpi label="Aktivitas akan datang" value={fmtNum(d.kpi.totalUpcoming)} hint="Terjadwal lebih dari 2 hari lagi" tone="t-upcoming" icon="calendar" />
+            <Kpi label="Aktivitas selesai" value={fmtNum(d.kpi.totalDone)} hint="Lewat H+7 atau ditandai selesai" tone="t-done" icon="checkCircle" />
           </div>
 
           <div className="grid g-5-7">
