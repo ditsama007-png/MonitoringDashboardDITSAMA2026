@@ -113,6 +113,13 @@ function readableMessage(body, status, retryAfter) {
     if (MESSAGES[msg]) return MESSAGES[msg];
     if (msg.startsWith("SUGT dashboard")) return SUGT_DOWN;
     if (/ not found: /.test(msg)) return "Sebagian data tidak ditemukan (mungkin sudah dihapus). Muat ulang halaman.";
+    // impor Excel: isi sel melebihi batas kolom database
+    const tooLong = /^Import row (\d+): "(.+)" is longer than (\d+) characters\.$/.exec(msg);
+    if (tooLong) {
+      const [, row, col, max] = tooLong;
+      return `Impor dibatalkan: baris ${row}, kolom "${col}" lebih dari ${max} karakter. Persingkat isinya`
+        + (/^Issue/i.test(col) ? " atau pindahkan sebagian ke kolom Issue berikutnya (mis. Issue 2)." : ".");
+    }
   }
   return byStatus(status);
 }
